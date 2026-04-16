@@ -29,39 +29,52 @@ Originally part of the `llm-sec-workbench`, it has been carved out to provide a 
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/Coding-Agent-Guard.git
+   git clone https://github.com/packetcraft/Coding-Agent-Guard.git
    cd Coding-Agent-Guard
    ```
 
-2. Install the package globally (recommended):
+2. Create a virtual environment (optional but recommended):
+   - **macOS / Linux**:
+     ```bash
+     python3 -m venv venv
+     source venv/bin/activate
+     ```
+   - **Windows**:
+     ```powershell
+     python -m venv venv
+     .\venv\Scripts\Activate.ps1
+     ```
+
+3. Install the package in editable mode:
    ```bash
    pip install -e .
    ```
-   *This makes the `coding-agent-guard` command available from any directory.*
+   *This makes the `coding-agent-guard` command available globally in your environment.*
 
 ### Usage
 
-The guard can be added to **any** repository you are working in. We provide template settings files in the `agent_configs/` directory for quick setup.
+The guard can be added to **any** repository. We provide template settings files in the `agent_configs/` directory.
 
 #### Claude Code
 
-To protect a repository, navigate to it and copy the template:
+To protect a repository, navigate to its root and copy the template:
 
-```bash
-# In the repository you want to protect
-mkdir -p .claude
-cp /path/to/Coding-Agent-Guard/agent_configs/claude.settings.template.json .claude/settings.json
-```
+- **macOS / Linux / Windows (PowerShell)**:
+  ```bash
+  mkdir -p .claude
+  cp /path/to/Coding-Agent-Guard/agent_configs/claude.settings.template.json .claude/settings.json
+  ```
 
 #### Gemini CLI
 
-To protect a repository, navigate to it and copy the template:
+To protect a repository, navigate to its root and copy the template:
 
-```bash
-# In the repository you want to protect
-mkdir -p .gemini
-cp /path/to/Coding-Agent-Guard/agent_configs/gemini_settings.template.json .gemini/settings.json
-```
+- **macOS / Linux / Windows (PowerShell)**:
+  ```bash
+  mkdir -p .gemini
+  cp /path/to/Coding-Agent-Guard/agent_configs/gemini_settings.template.json .gemini/settings.json
+  ```
+
 
 ## ⚙️ Configuration
 
