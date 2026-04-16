@@ -157,11 +157,36 @@ def _render_audit_explorer(audit_path: str) -> None:
     # Sidebar filters
     with st.sidebar:
         st.markdown("### Audit Filters")
+        
+        # Agent selector
+        agents = sorted(df["agent"].unique().tolist())
+        selected_agents = st.multiselect("Agents", options=agents, default=[], placeholder="All agents")
+
+        # Session selector
+        session_ids = sorted(df["session_id"].unique().tolist())
+        selected_sessions = st.multiselect("Sessions", options=session_ids, default=[], placeholder="All sessions")
+
+        # Tool type
+        tools = sorted(df["tool_name"].unique().tolist())
+        selected_tools = st.multiselect("Tools", options=tools, default=[], placeholder="All tools")
+
+        # Verdict
+        verdicts = sorted(df["verdict"].unique().tolist())
+        selected_verdicts = st.multiselect("Verdicts", options=verdicts, default=[], placeholder="All verdicts")
+
         keyword = st.text_input("Search tool input", key="ae_keyword", placeholder="e.g. rm -rf, curl, .env")
         st.divider()
 
     # Apply filters
     filtered = df.copy()
+    if selected_agents:
+        filtered = filtered[filtered["agent"].isin(selected_agents)]
+    if selected_sessions:
+        filtered = filtered[filtered["session_id"].isin(selected_sessions)]
+    if selected_tools:
+        filtered = filtered[filtered["tool_name"].isin(selected_tools)]
+    if selected_verdicts:
+        filtered = filtered[filtered["verdict"].isin(selected_verdicts)]
     if keyword:
         mask = filtered["tool_input"].astype(str).str.contains(keyword, case=False, na=False)
         filtered = filtered[mask]
