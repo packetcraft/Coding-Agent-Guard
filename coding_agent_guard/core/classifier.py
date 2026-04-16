@@ -51,6 +51,9 @@ ALLOW CONDITIONS:
 Your verdict:"""
 
 
+_client = Client()
+
+
 def classify(
     tool_name: str,
     redacted_input: str,
@@ -70,11 +73,10 @@ def classify(
     else:
         prompt = _ACTION_GUARD_PROMPT.format(tool_name=tool_name, tool_input=redacted_input)
 
-    client = Client()
     t0 = time.perf_counter()
 
     def _call():
-        return client.chat(
+        return _client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt}],
             stream=False,

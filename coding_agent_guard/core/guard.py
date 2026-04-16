@@ -45,6 +45,10 @@ def main() -> None:
 
     # ── 3. Detect new session (before any writes) ─────────────────────────────
     is_new_session = not (audit_path / f"{session_id}.jsonl").exists()
+    if is_new_session and cfg.audit_only:
+        sys.stderr.write(
+            "[coding-agent-guard] WARNING: audit_only=true — guard is logging but NOT blocking.\n"
+        )
 
     # ── 4. PostToolUse — scan command output for exfiltration signals ─────────
     if hook_event == "PostToolUse":
@@ -54,7 +58,6 @@ def main() -> None:
         for pattern_str in cfg.ipi_blocklist:
             pattern = re.compile(pattern_str)
             if pattern.search(output_text):
-                verdict = "BLOCK"
                 raw_output = f"BLOCK - Fast-path regex match: {pattern.pattern}"
                 latency_ms = 0
                 redacted_output, redaction_count = redact(truncate_output(output_text))
@@ -67,7 +70,7 @@ def main() -> None:
                     "hook_event":        hook_event,
                     "tool_name":         tool_name,
                     "tool_input":        {"output_preview": redacted_output[:500]},
-                    "verdict":           verdict,
+                    "verdict":           "BLOCK_AUDITED",  # detected but not enforced — PostToolUse cannot block
                     "inspection_method": "REGEX",
                     "block_reason":      "Prompt injection detected via fast-path regex.",
                     "guard_model":       None,
@@ -85,6 +88,9 @@ def main() -> None:
         verdict, raw_output, latency_ms = classify(
             f"{tool_name}:output", redacted_output, cfg.guard_model, cfg.timeout_ms, hook_event="PostToolUse"
         )
+        # PostToolUse cannot block — remap BLOCK to BLOCK_AUDITED so the audit
+        # log accurately reflects "detected but not enforced".
+        audited_verdict = "BLOCK_AUDITED" if verdict == "BLOCK" else verdict
         record = {
             "schema_version":    "v1",
             "event_type":        "TOOL_CALL",
@@ -94,9 +100,9 @@ def main() -> None:
             "hook_event":        hook_event,
             "tool_name":         tool_name,
             "tool_input":        {"output_preview": redacted_output[:500]},
-            "verdict":           verdict,
+            "verdict":           audited_verdict,
             "inspection_method": "LLM",
-            "block_reason":      "Prompt injection detected via LLM guard.",
+            "block_reason":      "Prompt injection detected via LLM guard." if audited_verdict == "BLOCK_AUDITED" else None,
             "guard_model":       cfg.guard_model,
             "guard_raw_output":  raw_output,
             "latency_ms":        latency_ms,
@@ -104,7 +110,7 @@ def main() -> None:
         }
 
         write_audit(audit_path, session_id, record, is_new_session, cfg.guard_model, cfg.timeout_ms, agent_name)
-        adapter.allow()  # PostToolUse is always audit-only — no blocking
+        adapter.allow()  # PostToolUse is always observation-only — no blocking
 
     # ── 5. PreToolUse — allowlist check (Bash only) ───────────────────────────
     if cfg.allowlist_enabled and tool_name.lower() in ["bash", "sh"]:
@@ -134,7 +140,7 @@ def main() -> None:
     if any(k in tool_name.lower() for k in ["write", "edit", "patch"]):
         file_path = str(tool_input.get("file_path", ""))
         # Normalize: replace backslashes and strip leading ./
-        norm_path = file_path.replace("\\\\", "/").lstrip("./")
+        norm_path = file_path.replace("\\", "/").lstrip("./")
         if any(norm_path.endswith(p) for p in cfg.protected_paths):
             block_reason = f"Security: modifying protected hook configuration is forbidden ({file_path})"
             record = {

@@ -21,9 +21,13 @@ agentic:
   # built-in read-only list. Shell-composition disqualifier still applies.
   allowlist_patterns: []
 
-  # When true, the hook classifies and logs every tool call but never blocks
-  # (always exits 0). BLOCK verdicts are still recorded in the audit log as
-  # "would have blocked" — visible in the Agentic Security UI.
-  # Set to false to enable enforcement mode (exit 2 on BLOCK verdicts).
-  # Recommended: keep true during active development, false in review sessions.
+  # ⚠ ENFORCEMENT DISABLED WHEN true ⚠
+  # When audit_only is true the hook classifies and logs every tool call but
+  # NEVER blocks — it always exits 0. The agent can still execute any action.
+  # BLOCK verdicts are recorded as "BLOCK_AUDITED" in the audit log and are
+  # visible in the dashboard, but they have no enforcement effect.
+  #
+  # Set to false to enable enforcement mode: exit 2 on BLOCK verdicts so the
+  # agent is actually stopped.
+  # Recommended: true during active development, false in review/production sessions.
   audit_only: true

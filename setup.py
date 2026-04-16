@@ -21,7 +21,7 @@ setup(
     description="A standalone security primitive for AI coding agents",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/your-repo/Coding-Agent-Guard",
+    url="https://github.com/packetcraft/Coding-Agent-Guard",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
