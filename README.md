@@ -40,7 +40,12 @@ Originally part of the `llm-sec-workbench`, it has been carved out to provide a 
      python3 -m venv venv
      source venv/bin/activate
      ```
-   - **Windows**:
+   - **Windows (Git Bash / MINGW64)**:
+     ```bash
+     python -m venv venv
+     source venv/Scripts/activate
+     ```
+   - **Windows (PowerShell)**:
      ```powershell
      python -m venv venv
      .\venv\Scripts\Activate.ps1
