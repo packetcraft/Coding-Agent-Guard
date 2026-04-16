@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-04-16
 
 ### Added
+- **Advanced Dashboard Filtering**: Sidebar filters for Agent, Session, Tool, and Verdict in the Audit Explorer.
 - **Security Dashboard UI**: Standalone Streamlit interface for Live Feed, Audit Explorer, and security metrics.
 - **Repository Carve-Out**: Initial standalone release extracted from `llm-sec-workbench`.
 - **Modular Core**: Refactored logic into `coding_agent_guard/core` (config, redactor, allowlist, classifier, telemetry).

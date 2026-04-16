@@ -106,7 +106,7 @@ python dashboard.py
 
 The dashboard provides:
 - **Live Feed**: Auto-refreshing view of current tool calls and verdicts.
-- **Audit Explorer**: Filterable historical view of all security events.
+- **Audit Explorer**: Filterable historical view of all security events with advanced sidebar filters (Agent, Session, Tool, Verdict, Keyword).
 - **Security Dashboard**: Statistical charts on block rates, tool usage, and latency.
 
 ## ⚙️ Configuration
