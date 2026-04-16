@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-04-16
 
 ### Added
+- **Security Dashboard UI**: Standalone Streamlit interface for Live Feed, Audit Explorer, and security metrics.
 - **Repository Carve-Out**: Initial standalone release extracted from `llm-sec-workbench`.
 - **Modular Core**: Refactored logic into `coding_agent_guard/core` (config, redactor, allowlist, classifier, telemetry).
 - **Agent Adapters**: Unified adapter interface for Claude Code and Gemini CLI (`coding_agent_guard/adapters`).

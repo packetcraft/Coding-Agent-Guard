@@ -13,6 +13,7 @@ Originally part of the `llm-sec-workbench`, it has been carved out to provide a 
 - **Protected Paths**: Prevents agents from modifying critical configuration files or the guard itself.
 - **Telemetry & Auditing**: Detailed JSONL logs of every tool call, verdict, and latency for security review.
 - **Multi-Agent Support**: Native adapters for Claude Code and Gemini CLI.
+- **Security Dashboard**: Standalone Streamlit UI for real-time monitoring and audit exploration.
 
 ## 🚀 Getting Started
 
@@ -75,6 +76,19 @@ To protect a repository, navigate to its root and copy the template:
   cp /path/to/Coding-Agent-Guard/agent_configs/gemini_settings.template.json .gemini/settings.json
   ```
 
+### Security Dashboard
+
+To monitor your agent's activity and audit past sessions, launch the real-time dashboard:
+
+```bash
+# From the Coding-Agent-Guard root
+python dashboard.py
+```
+
+The dashboard provides:
+- **Live Feed**: Auto-refreshing view of current tool calls and verdicts.
+- **Audit Explorer**: Filterable historical view of all security events.
+- **Security Dashboard**: Statistical charts on block rates, tool usage, and latency.
 
 ## ⚙️ Configuration
 

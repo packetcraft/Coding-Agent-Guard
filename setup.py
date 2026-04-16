@@ -16,7 +16,7 @@ setup(
     },
     author="Coding Agent Guard Contributors",
     description="A standalone security primitive for AI coding agents",
-    long_description=open("README.md").read(),
+    long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/your-repo/Coding-Agent-Guard",
     classifiers=[

@@ -30,6 +30,7 @@ Existing security measures are often "Passive" (logs only). **Coding Agent Guard
 - **Secret Redaction**: Automatic masking of API keys and credentials in audit logs.
 - **Protected Paths**: Hard-block modifications to sensitive system or configuration files.
 - **Structured Auditing**: Generate JSONL logs for every action for forensic review.
+- **Security Dashboard**: Standalone Streamlit UI for real-time monitoring, audit exploration, and security metrics.
 
 ## 6. Roadmap (V2 - Future)
 - **Static Analysis Guard**: Intercept file writes to run `bandit` or `eslint-plugin-security`.
