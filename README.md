@@ -59,7 +59,21 @@ Originally part of the `llm-sec-workbench`, it has been carved out to provide a 
 
 ### Usage
 
-The guard can be added to **any** repository. We provide template settings files in the `agent_configs/` directory.
+The guard can be added to **any** repository. We provide an installation script to automatically configure hooks with absolute paths:
+
+#### 🪄 Automated Setup (Recommended)
+
+Run the installer script from the root of the `Coding-Agent-Guard` repository:
+
+```bash
+# To protect the Fuel-Log-AI repository
+python install_hooks.py ../Fuel-Log-AI
+```
+*This script automatically creates the `.claude/settings.json` and `.gemini/settings.json` files with the correct absolute path to your guard.*
+
+#### 🛠️ Manual Setup
+
+We also provide template settings files in the `agent_configs/` directory.
 
 #### Claude Code
 
