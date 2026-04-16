@@ -8,6 +8,9 @@ setup(
         "ollama>=0.3.0",
         "pyyaml>=6.0",
         "python-dotenv>=1.0.0",
+        "streamlit>=1.37.0",
+        "pandas>=2.0.0",
+        "plotly>=5.18.0",
     ],
     entry_points={
         "console_scripts": [

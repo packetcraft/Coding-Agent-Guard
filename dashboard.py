@@ -10,7 +10,8 @@ sys.path.append(str(root))
 def main():
     dashboard_path = root / "coding_agent_guard" / "ui" / "dashboard.py"
     try:
-        subprocess.run(["streamlit", "run", str(dashboard_path)], check=True)
+        # Using sys.executable -m streamlit is more robust across platforms
+        subprocess.run([sys.executable, "-m", "streamlit", "run", str(dashboard_path)], check=True)
     except KeyboardInterrupt:
         pass
     except Exception as e:
