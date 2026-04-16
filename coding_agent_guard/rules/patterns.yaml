@@ -1,0 +1,18 @@
+# ── Injection Guard Blocklist (PostToolUse) ──────────────────────────────────
+# Obvious prompt injection signatures that bypass the LLM for an instant BLOCK.
+ipi_blocklist:
+  - "(?i)ignore (all )?previous instructions"
+  - "(?i)forget (your )?training"
+  - "(?i)new system prompt"
+  - "(?i)act as (a )?DAN"
+  - "(?i)developer mode (enabled|on)"
+  - "(?i)\\[SYSTEM INSTRUCTION\\]"
+
+# Paths that Claude Code is forbidden from modifying via Write/Edit tools.
+# Any Write/Edit to these paths will be hard-blocked regardless of the guard model.
+protected_paths:
+  - ".claude/settings.json"
+  - "hooks/agentic_guard.py"
+  - "config.yaml"
+  - "coding_agent_guard/rules/config.yaml"
+  - "coding_agent_guard/rules/patterns.yaml"

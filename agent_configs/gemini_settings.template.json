@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "coding-agent-guard",
+            "type": "command",
+            "command": "coding-agent-guard"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "name": "coding-agent-guard",
+            "type": "command",
+            "command": "coding-agent-guard"
+          }
+        ]
+      }
+    ]
+  }
+}

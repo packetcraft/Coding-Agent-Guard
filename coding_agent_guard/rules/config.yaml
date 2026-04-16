@@ -1,0 +1,29 @@
+agentic:
+  # Path to the audit directory, relative to the project root.
+  # The hook script writes here; the Streamlit UI reads from here.
+  audit_path: "./audit"
+
+  # Ollama model used by the hook script for tool-call classification.
+  # Must be pulled before hooks will work: ollama pull qwen2.5:1.5b
+  # Fallback if VRAM is constrained: tinyllama
+  guard_model: "qwen2.5:1.5b"
+
+  # Hard timeout in milliseconds before the hook fails open.
+  # Documented value: 5000 ms. Update docs/agentic/PLAN.md if changing.
+  guard_timeout_ms: 5000
+
+  # When true, read-only commands (git status, ls, cat, etc.) bypass the
+  # Ollama call and are logged as ALLOWLISTED. Set to false to force every
+  # command through the guard model (higher latency, no security benefit for reads).
+  allowlist_enabled: true
+
+  # Additional allowlist patterns (Python regex strings) appended to the
+  # built-in read-only list. Shell-composition disqualifier still applies.
+  allowlist_patterns: []
+
+  # When true, the hook classifies and logs every tool call but never blocks
+  # (always exits 0). BLOCK verdicts are still recorded in the audit log as
+  # "would have blocked" — visible in the Agentic Security UI.
+  # Set to false to enable enforcement mode (exit 2 on BLOCK verdicts).
+  # Recommended: keep true during active development, false in review sessions.
+  audit_only: true
