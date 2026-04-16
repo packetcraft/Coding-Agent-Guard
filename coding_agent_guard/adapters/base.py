@@ -1,6 +1,11 @@
 import json
 import sys
 
+# Force UTF-8 on Windows so em-dashes and other non-ASCII in messages don't corrupt
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
 def exit_allow(is_gemini: bool) -> None:
     if is_gemini:
         print(json.dumps({"decision": "allow"}))

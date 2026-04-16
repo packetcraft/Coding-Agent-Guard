@@ -14,7 +14,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "coding-agent-guard=coding_agent_guard.core.guard:main",
+            "coding-agent-guard=coding_agent_guard.cli:main",
         ],
     },
     author="Coding Agent Guard Contributors",

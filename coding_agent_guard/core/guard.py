@@ -46,8 +46,8 @@ def main() -> None:
     # ── 3. Detect new session (before any writes) ─────────────────────────────
     is_new_session = not (audit_path / f"{session_id}.jsonl").exists()
     if is_new_session and cfg.audit_only:
-        sys.stderr.write(
-            "[coding-agent-guard] WARNING: audit_only=true — guard is logging but NOT blocking.\n"
+        sys.stderr.buffer.write(
+            "[coding-agent-guard] WARNING: audit_only=true -- guard is logging but NOT blocking.\n".encode("utf-8")
         )
 
     # ── 4. PostToolUse — scan command output for exfiltration signals ─────────

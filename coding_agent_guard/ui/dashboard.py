@@ -281,7 +281,7 @@ def _render_dashboard(audit_path: str) -> None:
         verdict_counts.columns = ["Verdict", "Count"]
         fig = px.pie(verdict_counts, values="Count", names="Verdict", 
                      color="Verdict", color_discrete_map=_VERDICT_COLOUR)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     with col_right:
         st.markdown("**Events by tool type**")
@@ -290,11 +290,252 @@ def _render_dashboard(audit_path: str) -> None:
         st.bar_chart(tool_counts.set_index("Tool"), width="stretch")
 
 
+# ── Tab: Shadow AI ────────────────────────────────────────────────────────────
+
+_SEV_COLOUR = {
+    "HIGH":   "#F7768E",
+    "MEDIUM": "#E0AF68",
+    "LOW":    "#9ECE6A",
+}
+
+_STATUS_COLOUR = {
+    "COVERED":     "#9ECE6A",
+    "SHADOW_HOOK": "#E0AF68",
+    "UNGUARDED":   "#F7768E",
+}
+
+
+def _sev_badge(severity: str) -> str:
+    colour = _SEV_COLOUR.get(severity, "#888888")
+    return f'<span style="background:{colour};color:#1a1b26;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">{severity}</span>'
+
+
+def _status_badge(status: str) -> str:
+    colour = _STATUS_COLOUR.get(status, "#888888")
+    return f'<span style="background:{colour};color:#1a1b26;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">{status}</span>'
+
+
+def _load_latest_shadow_scan(audit_path: str) -> dict | None:
+    scan_file = Path(audit_path) / "shadow_ai_scans.jsonl"
+    if not scan_file.exists():
+        return None
+    last: dict | None = None
+    try:
+        with open(scan_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        last = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+    except OSError:
+        return None
+    return last
+
+
+def _run_shadow_scan_now(audit_path: str, scan_root: str | None) -> dict:
+    from coding_agent_guard.discovery.scanner import run_scan, emit_audit
+    from coding_agent_guard.discovery.report import as_json
+    result = run_scan(scan_root=scan_root)
+    emit_audit(result, Path(audit_path))
+    return json.loads(as_json(result))
+
+
+def _fmt_timestamp(ts_raw: str) -> str:
+    """Format ISO timestamp to a human-readable string."""
+    try:
+        return (
+            datetime.datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+            .strftime("%Y-%m-%d %H:%M UTC")
+        )
+    except Exception:
+        return ts_raw
+
+
+def _hook_display_name(cmd: str | None) -> str:
+    """Extract just the binary name from a potentially long hook command path."""
+    if not cmd:
+        return "—"
+    binary = cmd.split()[0]          # first token (ignore args)
+    name = Path(binary).name         # basename of the path
+    return name or binary
+
+
+def _mcp_endpoint_display(server: dict) -> str:
+    """For remote MCPs show the URL; for local show just the binary name."""
+    url = server.get("url")
+    if url:
+        return str(url)
+    cmd = server.get("command") or ""
+    binary = Path(cmd.split()[0]).name if cmd else ""
+    return binary or "—"
+
+
+def _render_shadow_ai(audit_path: str) -> None:
+    # ── Sidebar controls ──────────────────────────────────────────────────────
+    with st.sidebar:
+        st.markdown("### Shadow AI")
+        scan_root_input = st.text_input(
+            "Scan root",
+            value="",
+            placeholder="Auto-detect (leave blank)",
+            key="shadow_scan_root",
+        )
+        scan_now = st.button("Scan Now", key="shadow_scan_now")
+        st.divider()
+
+    scan_root = scan_root_input.strip() or None
+
+    # Run scan if requested
+    if scan_now:
+        with st.spinner("Running Shadow AI scan..."):
+            scan = _run_shadow_scan_now(audit_path, scan_root)
+        st.success(f"Scan complete — ID: {scan.get('scan_id', '?')}")
+    else:
+        scan = _load_latest_shadow_scan(audit_path)
+
+    if scan is None:
+        st.info(
+            "No scan data found. Click **Scan Now** in the sidebar to run your first scan."
+        )
+        return
+
+    summary = scan.get("summary", {})
+    ts = _fmt_timestamp(scan.get("timestamp", "—"))
+
+    st.caption(
+        f"Last scan: **{ts}** \u2022 Root: `{scan.get('scan_root', '—')}` \u2022 "
+        f"Scan ID: `{scan.get('scan_id', '—')}`"
+    )
+
+    # ── Metric row ────────────────────────────────────────────────────────────
+    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+    m1.metric("Agents",       summary.get("agents_found", 0))
+    m2.metric("Pairs",        summary.get("repo_agent_pairs", 0))   # repo × agent
+    m3.metric("Covered",      summary.get("covered", 0))
+    m4.metric("Unguarded",    summary.get("unguarded", 0))
+    m5.metric("MCP Servers",  summary.get("mcp_servers", 0))
+    m6.metric("High",         summary.get("high_findings", 0))
+    m7.metric("Medium",       summary.get("medium_findings", 0))
+
+    st.divider()
+
+    # ── Findings ──────────────────────────────────────────────────────────────
+    findings = scan.get("findings", [])
+    _SEV_ORD = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    findings = sorted(findings, key=lambda f: _SEV_ORD.get(f.get("severity", ""), 9))
+
+    st.markdown(f"#### Findings ({len(findings)})")
+    if findings:
+        for f in findings:
+            sev = f.get("severity", "?")
+            with st.expander(
+                f"{sev}  \u2022  {f.get('id', '?')}  \u2014  {f.get('category', '')}",
+                expanded=(sev == "HIGH"),
+            ):
+                c1, c2 = st.columns([1, 3])
+                with c1:
+                    st.markdown(_sev_badge(sev), unsafe_allow_html=True)
+                    if f.get("agent"):
+                        st.caption(f"Agent: {f['agent']}")
+                with c2:
+                    st.markdown(f.get("detail", ""))
+                    st.caption(f"Source: `{f.get('source', '')}`")
+                    st.info(f"**Fix:** {f.get('remediation', '')}")
+    else:
+        st.success("No findings — posture looks clean.")
+
+    st.divider()
+
+    # ── Coverage Map ──────────────────────────────────────────────────────────
+    coverage = scan.get("coverage_map", [])
+    unguarded_count = sum(1 for r in coverage if r.get("status") != "COVERED")
+
+    st.markdown(f"#### Coverage Map ({len(coverage)} repo/agent pairs)")
+
+    if coverage:
+        _STATUS_ORD = {"UNGUARDED": 0, "SHADOW_HOOK": 1, "COVERED": 2}
+        sorted_cov = sorted(
+            coverage,
+            key=lambda g: (
+                _STATUS_ORD.get(g.get("status", ""), 9),
+                g.get("agent", ""),
+                g.get("repo_path", ""),
+            ),
+        )
+
+        # Build compact dataframe: repo name only, hook binary name only
+        rows = []
+        for row in sorted_cov:
+            repo_path = row.get("repo_path", "")
+            repo_name = Path(repo_path).name or repo_path
+            rows.append({
+                "Status":    row.get("status", ""),
+                "Agent":     row.get("agent", ""),
+                "Repo":      repo_name,
+                "Hook":      _hook_display_name(row.get("hook_command")),
+                "Inherited": "yes" if row.get("inherited") else "no",
+            })
+
+        df_cov = pd.DataFrame(rows)
+
+        if unguarded_count == 0:
+            # Happy path: collapse the big table, surface a clear pass message
+            st.success(
+                f"All {len(sorted_cov)} repo/agent pairs are protected by Coding Agent Guard."
+            )
+            with st.expander("Show coverage details", expanded=False):
+                st.dataframe(df_cov, use_container_width=True, hide_index=True)
+        else:
+            # Something is unguarded — show the full table so problems are visible
+            st.dataframe(df_cov, use_container_width=True, hide_index=True)
+    else:
+        st.info("No coverage data.")
+
+    st.divider()
+
+    # ── Agent Inventory ───────────────────────────────────────────────────────
+    agents = scan.get("agents", [])
+    st.markdown(f"#### Agent Inventory ({len(agents)})")
+    if agents:
+        rows = []
+        for a in agents:
+            rows.append({
+                "Name":    a.get("name", ""),
+                "Version": a.get("version") or "—",
+                "Method":  a.get("install_method", ""),
+                "Auth":    a.get("auth_type") or "—",
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No agents detected.")
+
+    # ── MCP Surface ───────────────────────────────────────────────────────────
+    mcps = scan.get("mcp_servers", [])
+    st.markdown(f"#### MCP Surface ({len(mcps)} server(s))")
+    if mcps:
+        rows = []
+        for s in mcps:
+            trust = s.get("trust", False)
+            rows.append({
+                "Name":      s.get("name", ""),
+                "Agent":     s.get("agent", ""),
+                "Transport": s.get("transport", ""),
+                "Trust":     "⚠ YES" if trust else "no",
+                "Endpoint":  _mcp_endpoint_display(s),
+                "Tools":     s.get("tool_count") if s.get("tool_count") is not None else "—",
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+    else:
+        st.info("No MCP servers configured.")
+
+
 # ── Main Entry ────────────────────────────────────────────────────────────────
 
 def main() -> None:
     st.set_page_config(page_title="Coding Agent Guard Dashboard", layout="wide")
-    
+
     cfg = Config()
     # Resolve audit_path relative to project cwd.
     audit_path = (Path.cwd() / cfg.audit_path).resolve()
@@ -302,8 +543,8 @@ def main() -> None:
     st.markdown("## 🛡️ Coding Agent Guard Dashboard")
     st.caption(f"Inspecting audit logs from: `{audit_path}`")
 
-    tab_feed, tab_explorer, tab_dashboard = st.tabs([
-        "Live Feed", "Audit Explorer", "Security Dashboard",
+    tab_feed, tab_explorer, tab_dashboard, tab_shadow = st.tabs([
+        "Live Feed", "Audit Explorer", "Security Dashboard", "Shadow AI",
     ])
 
     with tab_feed:
@@ -314,6 +555,9 @@ def main() -> None:
 
     with tab_dashboard:
         _render_dashboard(str(audit_path))
+
+    with tab_shadow:
+        _render_shadow_ai(str(audit_path))
 
 
 if __name__ == "__main__":
