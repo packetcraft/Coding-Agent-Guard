@@ -532,6 +532,156 @@ def _render_shadow_ai(audit_path: str) -> None:
         st.info("No MCP servers configured.")
 
 
+# ── How it Works ──────────────────────────────────────────────────────────────
+
+def _render_how_it_works() -> None:
+    st.markdown("## How Coding Agent Guard Works")
+
+    st.markdown("""
+Coding Agent Guard sits between your AI coding agent (Claude Code, Gemini CLI) and every tool
+call it makes. It registers as a **pre-tool** and **post-tool** hook so it can inspect — and
+optionally block — each action before and after it executes.
+""")
+
+    st.markdown("---")
+
+    # ── Hook Interception ──
+    st.markdown("### Hook Interception")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**PreToolUse (before execution)**")
+        st.markdown("""
+1. **Allowlist fast-path** — read-only shell commands (`git log`, `cat`, `ls`) are approved
+   instantly without an LLM call. Shell composition (`|`, `>`, `&&`) is rejected to prevent bypass.
+2. **Protected-path hard-block** — any write to the guard's own config or the agent's hook
+   settings is blocked unconditionally, preventing the agent from disabling its own guard.
+3. **Secret redaction** — API keys, tokens, and PEM blocks are masked before the payload
+   reaches the classifier. Nothing sensitive is logged or sent to the LLM.
+4. **LLM classification** — the redacted tool input is sent to a local Ollama model with an
+   action-guard prompt. The model returns `BLOCK - <reason>` or `ALLOW`. Timeout fails open.
+""")
+    with col2:
+        st.markdown("**PostToolUse (after execution)**")
+        st.markdown("""
+1. **IPI regex scan** — tool output is scanned against a blocklist of known prompt-injection
+   phrases ("ignore previous instructions", "act as DAN", etc.). Match → instant `BLOCK_AUDITED`.
+2. **LLM injection detection** — the output is sent to the local model with an injection-guard
+   prompt that looks for instruction overrides, jailbreaks, and context manipulation.
+3. PostToolUse verdicts are **always observation-only** (`BLOCK_AUDITED`) — the tool has already
+   run, so the guard logs the threat and surfaces it in the dashboard rather than blocking.
+""")
+
+    st.markdown("---")
+
+    # ── Verdict Types ──
+    st.markdown("### Verdict Types")
+    verdicts = [
+        ("ALLOW", "#2ecc71", "LLM approved the action."),
+        ("ALLOWLISTED", "#3b82f6", "Regex fast-path matched a known-safe command."),
+        ("BLOCK", "#e74c3c", "Guard blocked the tool call (PreToolUse, enforcement mode)."),
+        ("BLOCK_AUDITED", "#f59e0b", "Threat detected and logged; not enforced (PostToolUse or audit-only mode)."),
+        ("ERROR", "#94a3b8", "LLM timed out or crashed — guard fails open and logs the error."),
+    ]
+    for verdict, colour, description in verdicts:
+        badge = f'<span style="background:{colour};color:#1a1b26;padding:2px 10px;border-radius:4px;font-size:0.8rem;font-weight:700;">{verdict}</span>'
+        st.markdown(f"{badge} &nbsp; {description}", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Inspection Methods ──
+    st.markdown("### Inspection Methods")
+    methods = [
+        ("LLM", "#a855f7", "Local Ollama model classifies the full tool input or output."),
+        ("REGEX", "#f97316", "Fast pattern match against IPI blocklist — no LLM call."),
+        ("ALLOWLIST", "#3b82f6", "Regex allowlist matched a read-only command — no LLM call."),
+        ("PATH", "#14b8a6", "Protected-path check blocked a write to a sensitive config file."),
+    ]
+    for method, colour, description in methods:
+        badge = f'<span style="background:{colour};color:#1a1b26;padding:2px 10px;border-radius:4px;font-size:0.8rem;font-weight:700;">{method}</span>'
+        st.markdown(f"{badge} &nbsp; {description}", unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ── Shadow AI Discovery ──
+    st.markdown("### Shadow AI Discovery")
+    st.markdown("""
+The **Shadow AI** scan audits your entire machine for AI agent installations and their security
+posture, independent of any live hook traffic.
+
+**Phase 1 — Inventory**
+- **Agent detection** probes 10 installation surfaces: npm globals, PATH, pip packages, VS Code
+  extensions, and agent-specific home-directory configs (Cursor, Windsurf, Claude Desktop, etc.).
+- **Config crawler** walks the filesystem for `.claude/settings.json` and `.gemini/settings.json`,
+  resolving the same parent-directory hook-inheritance chain the agents use at runtime.
+- **MCP inventory** collects all registered MCP servers from five sources (Claude Desktop, global
+  Claude/Gemini settings, extensions, and per-repo configs), classifying transport as `local` or
+  `remote` and recording trust settings.
+
+**Phase 2 — Analysis**
+- **Gap analyzer** assigns each (repo × agent) pair a coverage status:
+  - `COVERED` — at least one hook in the resolved chain is a known guard
+  - `SHADOW_HOOK` — hooks exist but none are guard commands (unknown tool in the slot)
+  - `UNGUARDED` — no hooks registered at all
+- **Trust analyzer** generates findings (HIGH / MEDIUM / LOW) for: remote MCP servers with
+  auto-trust, exposed API keys in env or `.env` files, overly broad folder-trust grants, orphaned
+  hook binaries, and unguarded active agents.
+""")
+
+    st.markdown("---")
+
+    # ── Enforcement Modes ──
+    st.markdown("### Enforcement Modes")
+    st.markdown("""
+Controlled by `audit_only` in `coding_agent_guard/rules/config.yaml`:
+
+| Mode | Behavior |
+|---|---|
+| `audit_only: true` *(default)* | BLOCK verdicts are logged but not enforced — the agent proceeds normally. Safe for initial rollout and evaluation. |
+| `audit_only: false` | BLOCK verdicts terminate the tool call. Claude Code sees exit code `2`; Gemini CLI receives `{"decision": "deny"}`. |
+
+The protected-path hard-block always enforces regardless of this setting — the guard's own
+configuration files can never be modified by the agent it watches.
+""")
+
+    st.markdown("---")
+
+    # ── Architecture ──
+    st.markdown("### Component Map")
+    st.code("""
+coding_agent_guard/
+├── core/
+│   ├── guard.py          Main hook execution pipeline
+│   ├── classifier.py     Ollama LLM integration (action & injection prompts)
+│   ├── allowlist.py      Regex fast-path for read-only commands
+│   ├── redactor.py       Secret masking (API keys, tokens, PEM blocks)
+│   ├── telemetry.py      Append-only JSONL audit logging
+│   └── config.py         YAML config loader
+├── adapters/
+│   ├── base.py           Agent detection, exit helpers
+│   ├── claude.py         Claude Code adapter (exit 0 / exit 2)
+│   └── gemini.py         Gemini CLI adapter (JSON decision object)
+├── discovery/
+│   ├── scanner.py        Orchestrates all Shadow AI probes
+│   ├── agents.py         Detects installed AI agents
+│   ├── config_crawler.py Parses agent configs & resolves hook inheritance
+│   ├── gap_analyzer.py   Determines COVERED / SHADOW_HOOK / UNGUARDED status
+│   ├── mcp_inventory.py  Enumerates MCP servers across all sources
+│   ├── trust_analyzer.py Generates security findings
+│   └── report.py         Text & JSON output formatters
+├── rules/
+│   ├── config.yaml       Guard model, timeouts, enforcement mode
+│   └── patterns.yaml     IPI blocklist, protected paths, allowlist patterns
+└── ui/
+    └── dashboard.py      This Streamlit dashboard
+""", language="text")
+
+    st.markdown("""
+Full architecture documentation is in the `docs/` directory:
+- `docs/hooks_architecture.md` — Hook interception & inspection deep-dive
+- `docs/shadow_ai_architecture.md` — Shadow AI discovery strategy & data models
+""")
+
+
 # ── Main Entry ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -544,8 +694,8 @@ def main() -> None:
     st.markdown("## 🛡️ Coding Agent Guard Dashboard")
     st.caption(f"Inspecting audit logs from: `{audit_path}`")
 
-    tab_feed, tab_explorer, tab_dashboard, tab_shadow = st.tabs([
-        "Live Feed", "Audit Explorer", "Security Dashboard", "Shadow AI",
+    tab_feed, tab_explorer, tab_dashboard, tab_shadow, tab_how = st.tabs([
+        "Live Feed", "Audit Explorer", "Security Dashboard", "Shadow AI", "How it Works",
     ])
 
     with tab_feed:
@@ -559,6 +709,9 @@ def main() -> None:
 
     with tab_shadow:
         _render_shadow_ai(str(audit_path))
+
+    with tab_how:
+        _render_how_it_works()
 
 
 if __name__ == "__main__":
