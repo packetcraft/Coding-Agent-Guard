@@ -36,13 +36,69 @@ In enforcement mode, a `BLOCK` verdict causes the hook to exit with code `2`, wh
 
 - Python 3.9+
 - [Ollama](https://ollama.com/) installed and running
-- Guard model pulled:
-  ```bash
-  ollama pull qwen2.5:1.5b
-  ```
-  *(Low-VRAM fallback: `tinyllama`)*
 
-### Installation
+### Quick Setup (recommended)
+
+Clone the repo and run the setup script — it handles everything automatically:
+
+```bash
+git clone https://github.com/packetcraft/Coding-Agent-Guard.git
+cd Coding-Agent-Guard
+```
+
+**macOS / Linux / Git Bash:**
+```bash
+./setup.sh
+```
+
+**Windows (CMD):**
+```bat
+setup.bat
+```
+
+The script runs 6 steps and prints progress:
+
+```
+[ 1/6 ] Checking Python...         OK -- Python 3.12.10
+[ 2/6 ] Checking Ollama...         OK -- ollama version 0.x.x
+[ 3/6 ] Virtual environment...     OK -- venv created
+[ 4/6 ] Installing package...      OK -- coding-agent-guard installed
+[ 5/6 ] Guard model...             Pulling qwen2.5:1.5b...  OK
+[ 6/6 ] Installing guard hooks...  [Claude] added 6  [Gemini] added 2
+```
+
+#### Repair / reinstall
+
+If the venv is broken or you want a clean reinstall:
+
+```bash
+./setup.sh --repair   # macOS / Linux / Git Bash
+setup.bat /repair     # Windows CMD
+```
+
+This wipes the venv, recreates it, reinstalls the package, re-pulls the model, and reinstalls hooks.
+
+---
+
+### Starting the Dashboard
+
+```bash
+./start.sh    # macOS / Linux / Git Bash
+start.bat     # Windows CMD
+```
+
+Opens the Streamlit dashboard at **http://localhost:8501** with four tabs:
+
+- **Live Feed** — auto-refreshing view of current tool calls and verdicts
+- **Audit Explorer** — filterable history of all security events (agent, session, tool, verdict, keyword)
+- **Security Dashboard** — block rates, tool usage breakdown, latency charts
+- **Shadow AI** — posture scan: installed agents, hook coverage map, MCP surface, trust findings
+
+---
+
+### Manual Installation
+
+If you prefer step-by-step control:
 
 1. Clone the repository:
    ```bash
@@ -50,31 +106,37 @@ In enforcement mode, a `BLOCK` verdict causes the hook to exit with code `2`, wh
    cd Coding-Agent-Guard
    ```
 
-2. Create a virtual environment (optional but recommended):
+2. Create and activate a virtual environment:
 
    **macOS / Linux:**
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
+   python3 -m venv venv && source venv/bin/activate
    ```
 
-   **Windows — Git Bash / MINGW64:**
+   **Windows — Git Bash:**
    ```bash
-   python -m venv venv
-   source venv/Scripts/activate
+   python -m venv venv && source venv/Scripts/activate
    ```
 
    **Windows — PowerShell:**
    ```powershell
-   python -m venv venv
-   .\venv\Scripts\Activate.ps1
+   python -m venv venv; .\venv\Scripts\Activate.ps1
    ```
 
 3. Install the package:
    ```bash
    pip install -e .
    ```
-   This registers the `coding-agent-guard` command in your environment.
+
+4. Pull the guard model:
+   ```bash
+   ollama pull qwen2.5:1.5b
+   ```
+   *(Low-VRAM fallback: `tinyllama`)*
+
+5. Install hooks (see Hook Installation below).
+
+---
 
 ### Hook Installation
 
@@ -84,53 +146,50 @@ The guard works by registering as a pre/post-tool hook in the target repository'
 python install_hooks.py /path/to/your-repo
 ```
 
-This creates or **merges** `.claude/settings.json` and `.gemini/settings.json` in the target repo. Existing hook entries are preserved; the guard's entries are appended only if not already present. A summary is printed showing what was added vs. skipped.
+This creates or **merges** `.claude/settings.json` and `.gemini/settings.json` in the target repo. Existing hook entries are preserved; the guard's entries are appended only if not already present.
 
 ```
 [Claude] Updated (added 6, skipped 0 already-present): /path/to/your-repo/.claude/settings.json
 [Gemini] Updated (added 2, skipped 0 already-present): /path/to/your-repo/.gemini/settings.json
 ```
 
-**`--force` flag:** To overwrite existing settings completely instead of merging:
+**`--force` flag:** Overwrite existing settings completely instead of merging:
 ```bash
 python install_hooks.py /path/to/your-repo --force
 ```
 
-#### Manual Setup
+#### Manual Hook Setup
 
 If you prefer to configure hooks by hand, copy the templates from `agent_configs/`:
 
-**Claude Code** — copy to `.claude/settings.json` in the target repo:
 ```bash
 # macOS / Linux
 cp /path/to/Coding-Agent-Guard/agent_configs/claude.settings.template.json .claude/settings.json
-
-# Windows PowerShell
-Copy-Item C:\path\to\Coding-Agent-Guard\agent_configs\claude.settings.template.json .claude\settings.json
-```
-
-**Gemini CLI** — copy to `.gemini/settings.json` in the target repo:
-```bash
-# macOS / Linux
 cp /path/to/Coding-Agent-Guard/agent_configs/gemini_settings.template.json .gemini/settings.json
 
 # Windows PowerShell
+Copy-Item C:\path\to\Coding-Agent-Guard\agent_configs\claude.settings.template.json .claude\settings.json
 Copy-Item C:\path\to\Coding-Agent-Guard\agent_configs\gemini_settings.template.json .gemini\settings.json
 ```
 
-> The templates use `"command": "coding-agent-guard"` which requires a global install (`pip install -e .`). If you installed into a venv, use the automated installer instead — it writes the absolute path to the venv executable.
+> The templates use `"command": "coding-agent-guard"` which requires the venv to be active. If the venv may not always be active, use the automated installer — it writes the absolute path to the venv executable.
 
-### Security Dashboard
+### Shadow AI Posture Scan
+
+Run a discovery scan to audit all AI agents, hook coverage, MCP servers, and trust settings on the machine:
 
 ```bash
-python dashboard.py
+coding-agent-guard shadow-ai
 ```
 
-The dashboard reads from the `audit/` directory and provides:
+Options:
+```bash
+coding-agent-guard shadow-ai --root /path/to/projects   # scan a specific directory
+coding-agent-guard shadow-ai --output json               # JSON output for SIEM/export
+coding-agent-guard shadow-ai --no-audit                  # skip writing to audit log
+```
 
-- **Live Feed**: Auto-refreshing view of current tool calls and verdicts.
-- **Audit Explorer**: Filterable history of all security events (filter by agent, session, tool, verdict, or keyword).
-- **Security Charts**: Block rates, tool usage breakdown, and latency distribution.
+Results are also available in the **Shadow AI** tab of the dashboard.
 
 ## ⚙️ Configuration
 

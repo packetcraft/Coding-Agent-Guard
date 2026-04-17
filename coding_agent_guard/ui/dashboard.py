@@ -2,6 +2,7 @@ import glob
 import json
 import datetime
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -315,11 +316,11 @@ def _status_badge(status: str) -> str:
     return f'<span style="background:{colour};color:#1a1b26;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">{status}</span>'
 
 
-def _load_latest_shadow_scan(audit_path: str) -> dict | None:
+def _load_latest_shadow_scan(audit_path: str) -> Optional[dict]:
     scan_file = Path(audit_path) / "shadow_ai_scans.jsonl"
     if not scan_file.exists():
         return None
-    last: dict | None = None
+    last: Optional[dict] = None
     try:
         with open(scan_file, encoding="utf-8") as f:
             for line in f:
@@ -334,7 +335,7 @@ def _load_latest_shadow_scan(audit_path: str) -> dict | None:
     return last
 
 
-def _run_shadow_scan_now(audit_path: str, scan_root: str | None) -> dict:
+def _run_shadow_scan_now(audit_path: str, scan_root: Optional[str]) -> dict:
     from coding_agent_guard.discovery.scanner import run_scan, emit_audit
     from coding_agent_guard.discovery.report import as_json
     result = run_scan(scan_root=scan_root)
@@ -353,7 +354,7 @@ def _fmt_timestamp(ts_raw: str) -> str:
         return ts_raw
 
 
-def _hook_display_name(cmd: str | None) -> str:
+def _hook_display_name(cmd: Optional[str]) -> str:
     """Extract just the binary name from a potentially long hook command path."""
     if not cmd:
         return "—"
