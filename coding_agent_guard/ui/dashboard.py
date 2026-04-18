@@ -493,13 +493,21 @@ _SEV_COLOUR = {
 
 _STATUS_COLOUR = {
     "COVERED":        "#9ECE6A",
+    "BROKEN_HOOK":    "#FF6B6B",   # Bright red — looks covered but isn't
     "SHADOW_HOOK":    "#E0AF68",
     "ARTIFACT_ONLY":  "#7AA2F7",   # Blue for passive/artifacts
     "EXTERNAL_BRAIN": "#BB9AF7",   # Purple for external discovery
     "UNGUARDED":      "#F7768E",
 }
 
-_STATUS_ORD = ["UNGUARDED", "EXTERNAL_BRAIN", "ARTIFACT_ONLY", "SHADOW_HOOK", "COVERED"]
+_CAPABILITY_TIER_COLOUR = {
+    "exec":        "#F7768E",   # red
+    "network":     "#E0AF68",   # amber
+    "write-local": "#FF9E64",   # orange
+    "read-only":   "#9ECE6A",   # green
+}
+
+_STATUS_ORD = ["UNGUARDED", "BROKEN_HOOK", "EXTERNAL_BRAIN", "ARTIFACT_ONLY", "SHADOW_HOOK", "COVERED"]
 
 
 def _sev_badge(severity: str) -> str:
@@ -510,6 +518,29 @@ def _sev_badge(severity: str) -> str:
 def _status_badge(status: str) -> str:
     colour = _STATUS_COLOUR.get(status, "#888888")
     return f'<span style="background:{colour};color:#1a1b26;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">{status}</span>'
+
+
+def _load_all_shadow_scans(audit_path: str) -> list[dict]:
+    """Return all DISCOVERY_SCAN records from the audit file, oldest first."""
+    scan_file = Path(audit_path) / "shadow_ai_scans.jsonl"
+    scans: list[dict] = []
+    if not scan_file.exists():
+        return scans
+    try:
+        with open(scan_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                    if rec.get("event_type") == "DISCOVERY_SCAN":
+                        scans.append(rec)
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    return scans
 
 
 def _load_latest_shadow_scan(audit_path: str) -> Optional[dict]:
@@ -616,36 +647,158 @@ def _render_shadow_ai(audit_path: str) -> None:
         f"Scan ID: `{scan.get('scan_id', '—')}`"
     )
     
-    # Simple markdown generator for the scan dict
+    # Full-page markdown export matching everything rendered on the tab
     def _scan_dict_to_markdown(s: dict) -> str:
         lines = []
-        lines.append(f"# Shadow AI Discovery Report — {s.get('scan_id', '—')}")
+        lines.append(f"# AI Posture & Discovery Report — {s.get('scan_id', '—')}")
         lines.append(f"**Scan Root:** `{s.get('scan_root', '—')}`  ")
-        lines.append(f"**Timestamp:** {s.get('timestamp', '—')}  ")
-        lines.append("")
-        
-        summ = s.get("summary", {})
-        lines.append("## Executive Summary")
-        lines.append(f"- **IDEs Detected:** {summ.get('ides_found', 0)}")
-        lines.append(f"- **CLI Agents Detected:** {summ.get('agents_found', 0)}")
-        lines.append(f"- **Repo/Agent Pairs:** {summ.get('repo_agent_pairs', 0)}")
-        lines.append(f"- **Covered:** {summ.get('covered', 0)}")
-        lines.append(f"- **Passive Monitoring (Artifacts):** {summ.get('artifact_only', 0)}")
-        lines.append(f"- **Unguarded:** {summ.get('unguarded', 0)}")
-        lines.append(f"- **Posture Maturity Score:** {summ.get('posture_maturity_score', 0):.1f}%")
+        lines.append(f"**Timestamp:** {_fmt_timestamp(s.get('timestamp', '—'))}  ")
+        lines.append(f"**Scan ID:** `{s.get('scan_id', '—')}`  ")
+        lines.append(f"**Generated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ")
         lines.append("")
 
-        lines.append("## Findings")
-        findings = s.get("findings", [])
+        # ── Executive Summary ──────────────────────────────────────────────────
+        summ = s.get("summary", {})
+        score = summ.get("posture_maturity_score", 0)
+        lines.append("## Executive Summary")
+        lines.append("")
+        lines.append("| Metric | Value |")
+        lines.append("| :--- | :--- |")
+        lines.append(f"| IDEs Detected | {summ.get('ides_found', 0)} |")
+        lines.append(f"| CLI Agents Detected | {summ.get('agents_found', 0)} |")
+        lines.append(f"| Repo / Agent Pairs | {summ.get('repo_agent_pairs', 0)} |")
+        lines.append(f"| Covered | {summ.get('covered', 0)} |")
+        lines.append(f"| Broken Hooks | {summ.get('broken_hooks', 0)} |")
+        lines.append(f"| Shadow Hooks | {summ.get('shadow_hooks', 0)} |")
+        lines.append(f"| Passive Monitoring (Artifacts) | {summ.get('artifact_only', 0)} |")
+        lines.append(f"| Unguarded | {summ.get('unguarded', 0)} |")
+        lines.append(f"| MCP Servers | {summ.get('mcp_servers', 0)} |")
+        lines.append(f"| Remote MCPs (trust=true) | {summ.get('remote_mcps_trust_true', 0)} |")
+        lines.append(f"| High Severity Findings | {summ.get('high_findings', 0)} |")
+        lines.append(f"| Medium Severity Findings | {summ.get('medium_findings', 0)} |")
+        lines.append(f"| Low Severity Findings | {summ.get('low_findings', 0)} |")
+        lines.append(f"| **Posture Maturity Score** | **{score:.1f}%** |")
+        lines.append("")
+
+        # ── Posture Drift ──────────────────────────────────────────────────────
+        all_scans_local = _load_all_shadow_scans(audit_path)
+        if len(all_scans_local) >= 2:
+            from coding_agent_guard.discovery.scanner import diff_scans as _diff_scans
+            drift = _diff_scans(all_scans_local[-1], all_scans_local[-2])
+            delta = drift["posture_score_delta"]
+            sign = "+" if delta >= 0 else ""
+            lines.append("## Posture Drift (vs Previous Scan)")
+            lines.append("")
+            lines.append(f"| Field | Value |")
+            lines.append(f"| :--- | :--- |")
+            lines.append(f"| Previous Scan ID | `{drift.get('from_scan_id', '—')}` |")
+            lines.append(f"| Previous Timestamp | {_fmt_timestamp(drift.get('from_timestamp', '—'))} |")
+            lines.append(f"| Score Delta | {sign}{delta:.1f}% |")
+            if drift["new_agents"]:
+                lines.append(f"| New Agents Detected | {', '.join(drift['new_agents'])} |")
+            if drift["removed_agents"]:
+                lines.append(f"| Agents No Longer Found | {', '.join(drift['removed_agents'])} |")
+            if drift["new_mcp_servers"]:
+                lines.append(f"| New MCP Servers | {', '.join(x['name'] for x in drift['new_mcp_servers'])} |")
+            lines.append("")
+            if drift["newly_unprotected"]:
+                lines.append("### Repos That LOST Protection")
+                lines.append("")
+                lines.append("| Repo | Agent | Old Status | New Status |")
+                lines.append("| :--- | :--- | :--- | :--- |")
+                for r in drift["newly_unprotected"]:
+                    lines.append(f"| `{r['repo_path']}` | {r['agent']} | {r['old_status']} | {r['new_status']} |")
+                lines.append("")
+            if drift["newly_protected"]:
+                lines.append("### Repos That GAINED Protection")
+                lines.append("")
+                lines.append("| Repo | Agent | Old Status | New Status |")
+                lines.append("| :--- | :--- | :--- | :--- |")
+                for r in drift["newly_protected"]:
+                    lines.append(f"| `{r['repo_path']}` | {r['agent']} | {r['old_status']} | {r['new_status']} |")
+                lines.append("")
+
+        # ── Findings ───────────────────────────────────────────────────────────
+        findings = sorted(s.get("findings", []), key=lambda f: {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(f.get("severity", ""), 9))
+        lines.append(f"## Security Findings ({len(findings)})")
+        lines.append("")
         if findings:
             for f in findings:
-                lines.append(f"### {f.get('severity')}: {f.get('category')} ({f.get('id')})")
-                lines.append(f"- {f.get('detail')}")
-                lines.append(f"- **Fix:** {f.get('remediation')}")
+                sev = f.get("severity", "?")
+                lines.append(f"### {sev}: {f.get('category', '')} ({f.get('id', '?')})")
+                if f.get("agent"):
+                    lines.append(f"- **Agent:** {f['agent']}")
+                lines.append(f"- **Source:** `{f.get('source', '')}`")
+                lines.append(f"- **Detail:** {f.get('detail', '')}")
+                lines.append(f"- **Remediation:** {f.get('remediation', '')}")
                 lines.append("")
         else:
-            lines.append("No findings.")
-            
+            lines.append("No findings — posture looks clean.")
+            lines.append("")
+
+        # ── Coverage Map ───────────────────────────────────────────────────────
+        coverage = s.get("coverage_map", [])
+        _STATUS_ORD_EXP = {"UNGUARDED": 0, "BROKEN_HOOK": 1, "ARTIFACT_ONLY": 2, "SHADOW_HOOK": 3, "COVERED": 4}
+        coverage_sorted = sorted(
+            coverage,
+            key=lambda g: (_STATUS_ORD_EXP.get(g.get("status", ""), 9), g.get("agent", ""), g.get("repo_path", "")),
+        )
+        lines.append(f"## Hook Coverage Map ({len(coverage)} repo/agent pairs)")
+        lines.append("")
+        if coverage_sorted:
+            lines.append("| Status | Agent | Inherited | Hook Healthy | Hook | Repo |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+            for g in coverage_sorted:
+                healthy = g.get("hook_healthy")
+                healthy_str = "yes" if healthy is True else ("no" if healthy is False else "—")
+                arts = f" *(Artifacts: {', '.join(g['artifact_files'])})*" if g.get("artifact_files") else ""
+                lines.append(
+                    f"| {g.get('status', '')} | {g.get('agent', '')} | "
+                    f"{'yes' if g.get('inherited') else 'no'} | {healthy_str} | "
+                    f"`{_hook_display_name(g.get('hook_command'))}` | "
+                    f"`{g.get('repo_path', '')}`{arts} |"
+                )
+            lines.append("")
+        else:
+            lines.append("No coverage data.")
+            lines.append("")
+
+        # ── Agent Inventory ────────────────────────────────────────────────────
+        agents = s.get("agents", [])
+        lines.append(f"## Agent Inventory ({len(agents)})")
+        lines.append("")
+        if agents:
+            lines.append("| Name | Version | Type | Method | Auth |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- |")
+            for a in agents:
+                name = a.get("name", "")
+                method = a.get("install_method", "")
+                is_ide = any(x in name.lower() for x in ["vscode", "vs code", "zed", "antigravity", "cursor", "windsurf"])
+                type_str = "IDE / Workspace" if is_ide else ("CI/CD Pipeline" if method == "ci_pipeline" else ("Extension" if method == "vscode_extension" else "CLI Agent"))
+                lines.append(f"| {name} | {a.get('version') or '—'} | {type_str} | {method} | {a.get('auth_type') or '—'} |")
+            lines.append("")
+        else:
+            lines.append("No agents detected.")
+            lines.append("")
+
+        # ── MCP Surface ────────────────────────────────────────────────────────
+        mcps = s.get("mcp_servers", [])
+        lines.append(f"## MCP Surface ({len(mcps)} server(s))")
+        lines.append("")
+        if mcps:
+            lines.append("| Name | Agent | Transport | Capability Risk | Trust | Endpoint | Tools |")
+            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
+            for srv in mcps:
+                tier = (srv.get("capability_tier") or "—").upper()
+                trust = "YES ⚠" if srv.get("trust") else "no"
+                endpoint = srv.get("url") or Path(srv.get("command", "").split()[0]).name if srv.get("command") else "—"
+                tools = str(srv.get("tool_count")) if srv.get("tool_count") is not None else "—"
+                lines.append(f"| {srv.get('name', '')} | {srv.get('agent', '')} | {srv.get('transport', '')} | {tier} | {trust} | `{endpoint}` | {tools} |")
+            lines.append("")
+        else:
+            lines.append("No MCP servers configured.")
+            lines.append("")
+
         return "\n".join(lines)
 
     shadow_report_md = _scan_dict_to_markdown(scan)
@@ -672,6 +825,65 @@ def _render_shadow_ai(audit_path: str) -> None:
     m8.metric("Maturity", f"{score:.0f}%")
 
     st.divider()
+
+    # ── Posture Score Trend ───────────────────────────────────────────────────
+    all_scans = _load_all_shadow_scans(audit_path)
+    if len(all_scans) >= 2:
+        trend_rows = []
+        for s in all_scans:
+            ts_raw = s.get("timestamp", "")
+            try:
+                ts = datetime.datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+            except Exception:
+                continue
+            trend_rows.append({
+                "Timestamp": ts,
+                "Maturity Score (%)": round(s.get("summary", {}).get("posture_maturity_score", 0), 1),
+            })
+        if trend_rows:
+            trend_df = pd.DataFrame(trend_rows).set_index("Timestamp")
+            col_trend, col_diff = st.columns([2, 1])
+            with col_trend:
+                st.markdown("**Posture Maturity Score — Trend**")
+                fig_trend = px.line(
+                    trend_df.reset_index(),
+                    x="Timestamp",
+                    y="Maturity Score (%)",
+                    markers=True,
+                )
+                fig_trend.update_layout(
+                    margin=dict(t=10, b=10, l=0, r=0),
+                    height=220,
+                    yaxis=dict(range=[0, 105]),
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+
+            # ── Scan Diff ─────────────────────────────────────────────────────
+            with col_diff:
+                st.markdown("**Drift vs Previous Scan**")
+                from coding_agent_guard.discovery.scanner import diff_scans as _diff_scans
+                drift = _diff_scans(all_scans[-1], all_scans[-2])
+                delta = drift["posture_score_delta"]
+                sign = "+" if delta >= 0 else ""
+                color = "#9ECE6A" if delta >= 0 else "#F7768E"
+                st.markdown(
+                    f'<div style="font-size:2rem;font-weight:700;color:{color};">{sign}{delta:.1f}%</div>',
+                    unsafe_allow_html=True,
+                )
+                if drift["new_agents"]:
+                    st.warning(f"New agents: {', '.join(drift['new_agents'])}")
+                if drift["newly_unprotected"]:
+                    for r in drift["newly_unprotected"]:
+                        st.error(f"Lost protection: {r['agent']} @ {Path(r['repo_path']).name}")
+                if drift["newly_protected"]:
+                    for r in drift["newly_protected"]:
+                        st.success(f"Gained protection: {r['agent']} @ {Path(r['repo_path']).name}")
+                if drift["new_mcp_servers"]:
+                    st.warning(f"New MCPs: {[s['name'] for s in drift['new_mcp_servers']]}")
+                if not any([drift["new_agents"], drift["removed_agents"], drift["newly_unprotected"],
+                            drift["newly_protected"], drift["new_mcp_servers"], drift["removed_mcp_servers"]]):
+                    st.success("No changes since last scan.")
+        st.divider()
 
     # ── Education Section ─────────────────────────────────────────────────────
     with st.expander("🎓 **Research Brief: Understanding Passive Monitoring & Posture Maturity**", expanded=False):
@@ -734,7 +946,7 @@ The **Maturity Score** is a security research heuristic used to grade AI adoptio
     st.markdown(f"#### Coverage Map ({len(coverage)} repo/agent pairs)")
 
     if coverage:
-        _STATUS_ORD = {"UNGUARDED": 0, "ARTIFACT_ONLY": 1, "SHADOW_HOOK": 2, "COVERED": 3}
+        _STATUS_ORD = {"UNGUARDED": 0, "BROKEN_HOOK": 1, "ARTIFACT_ONLY": 2, "SHADOW_HOOK": 3, "COVERED": 4}
         sorted_cov = sorted(
             coverage,
             key=lambda g: (
@@ -766,7 +978,14 @@ The **Maturity Score** is a security research heuristic used to grade AI adoptio
 
         df_cov = pd.DataFrame(rows)
 
-        if unguarded_count == 0:
+        broken_count = sum(1 for r in coverage if r.get("status") == "BROKEN_HOOK")
+        if broken_count:
+            st.error(
+                f"{broken_count} repo(s) have a BROKEN_HOOK — guard is registered but the binary is missing. "
+                "These appear covered but tool calls pass through uninspected."
+            )
+
+        if unguarded_count == 0 and broken_count == 0:
             # Happy path: collapse the big table, surface a clear pass message
             st.success(
                 f"All {len(sorted_cov)} repo/agent pairs are protected by Coding Agent Guard."
@@ -774,7 +993,7 @@ The **Maturity Score** is a security research heuristic used to grade AI adoptio
             with st.expander("Show coverage details", expanded=False):
                 st.dataframe(df_cov, width='stretch', hide_index=True)
         else:
-            # Something is unguarded — show the full table so problems are visible
+            # Something is unguarded or broken — show the full table so problems are visible
             st.dataframe(df_cov, width='stretch', hide_index=True)
     else:
         st.info("No coverage data.")
@@ -825,15 +1044,25 @@ The **Maturity Score** is a security research heuristic used to grade AI adoptio
         rows = []
         for s in mcps:
             trust = s.get("trust", False)
+            tier = s.get("capability_tier") or "—"
             rows.append({
-                "Name":      s.get("name", ""),
-                "Agent":     s.get("agent", ""),
-                "Transport": s.get("transport", ""),
-                "Trust":     "⚠ YES" if trust else "no",
-                "Endpoint":  _mcp_endpoint_display(s),
-                "Tools":     s.get("tool_count") if s.get("tool_count") is not None else "—",
+                "Name":             s.get("name", ""),
+                "Agent":            s.get("agent", ""),
+                "Transport":        s.get("transport", ""),
+                "Capability Risk":  tier.upper() if tier != "—" else "—",
+                "Trust":            "⚠ YES" if trust else "no",
+                "Endpoint":         _mcp_endpoint_display(s),
+                "Tools":            s.get("tool_count") if s.get("tool_count") is not None else "—",
             })
         st.dataframe(rows, width='stretch', hide_index=True)
+
+        # Warn about high-risk tiers
+        exec_servers = [s["name"] for s in mcps if s.get("capability_tier") == "exec"]
+        net_servers = [s["name"] for s in mcps if s.get("capability_tier") == "network"]
+        if exec_servers:
+            st.error(f"EXEC-tier MCP servers detected (can run code/shell): {', '.join(exec_servers)}")
+        if net_servers:
+            st.warning(f"NETWORK-tier MCP servers detected (can make outbound requests): {', '.join(net_servers)}")
     else:
         st.info("No MCP servers configured.")
 

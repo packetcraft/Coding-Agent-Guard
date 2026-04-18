@@ -37,12 +37,13 @@ class RepoConfig:
 class GapResult:
     repo_path: str
     agent: str
-    status: str  # "COVERED", "SHADOW_HOOK", "ARTIFACT_ONLY", "EXTERNAL_BRAIN", "UNGUARDED"
+    status: str  # "COVERED", "BROKEN_HOOK", "SHADOW_HOOK", "ARTIFACT_ONLY", "EXTERNAL_BRAIN", "UNGUARDED"
     hook_command: str | None
     inherited: bool
     config_path: str | None
     artifact_files: list[str] = field(default_factory=list)
     external_brain_session: str | None = None
+    hook_healthy: bool | None = None  # None = not applicable; False = binary missing
 
 
 
@@ -56,6 +57,7 @@ class McpServer:
     agent: str            # which agent owns this config
     source: str           # config file path
     tool_count: int | None = None  # filled by Phase 4 enumeration
+    capability_tier: str | None = None  # "read-only" | "write-local" | "exec" | "network"
 
 
 @dataclass

@@ -22,6 +22,32 @@ def _load_json(path: Path) -> dict:
         return {}
 
 
+_EXEC_KEYWORDS = frozenset({
+    "exec", "shell", "bash", "cmd", "run", "python", "node", "deno",
+    "ruby", "process", "terminal", "subprocess", "spawn", "script",
+})
+_WRITE_KEYWORDS = frozenset({
+    "write", "create", "delete", "upload", "modify", "edit", "save",
+    "push", "deploy", "git", "file", "fs", "filesystem", "storage",
+})
+_NETWORK_KEYWORDS = frozenset({
+    "fetch", "http", "curl", "web", "api", "request", "browser",
+    "scrape", "download", "search", "slack", "email", "smtp",
+})
+
+
+def _classify_capability_tier(name: str, cmd: str | None, url: str | None) -> str:
+    """Classify an MCP server into a capability risk tier."""
+    tokens = set((name + " " + (cmd or "") + " " + (url or "")).lower().split())
+    if tokens & _EXEC_KEYWORDS:
+        return "exec"
+    if tokens & _NETWORK_KEYWORDS or url:
+        return "network"
+    if tokens & _WRITE_KEYWORDS:
+        return "write-local"
+    return "read-only"
+
+
 def _classify_mcp_entry(name: str, entry: dict, agent: str, source: str) -> McpServer:
     """Convert a raw MCP server dict into a McpServer dataclass."""
     # Determine transport
@@ -46,6 +72,7 @@ def _classify_mcp_entry(name: str, entry: dict, agent: str, source: str) -> McpS
         url = None
 
     trust = bool(entry.get("trust", False))
+    capability_tier = _classify_capability_tier(name, cmd, url)
 
     return McpServer(
         name=name,
@@ -55,6 +82,7 @@ def _classify_mcp_entry(name: str, entry: dict, agent: str, source: str) -> McpS
         trust=trust,
         agent=agent,
         source=source,
+        capability_tier=capability_tier,
     )
 
 

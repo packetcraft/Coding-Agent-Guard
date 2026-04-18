@@ -6,13 +6,14 @@ import json
 from coding_agent_guard.discovery import ScanResult
 
 
-_STATUS_ORDER = {"UNGUARDED": 0, "EXTERNAL_BRAIN": 1, "ARTIFACT_ONLY": 2, "SHADOW_HOOK": 3, "COVERED": 4}
+_STATUS_ORDER = {"UNGUARDED": 0, "BROKEN_HOOK": 1, "EXTERNAL_BRAIN": 2, "ARTIFACT_ONLY": 3, "SHADOW_HOOK": 4, "COVERED": 5}
 _SEV_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
 
 def _status_icon(status: str) -> str:
     return {
         "COVERED": "[OK]",
+        "BROKEN_HOOK": "[!!]",
         "SHADOW_HOOK": "[!]",
         "ARTIFACT_ONLY": "[?]",
         "EXTERNAL_BRAIN": "[@]",
@@ -107,6 +108,7 @@ def as_text(result: ScanResult) -> str:
     # ── Summary ───────────────────────────────────────────────────────────────
     total = len(result.gap_results)
     covered = sum(1 for g in result.gap_results if g.status == "COVERED")
+    broken = sum(1 for g in result.gap_results if g.status == "BROKEN_HOOK")
     shadow = sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK")
     unguarded = sum(1 for g in result.gap_results if g.status == "UNGUARDED")
     artifact_only = sum(1 for g in result.gap_results if g.status == "ARTIFACT_ONLY")
@@ -119,6 +121,7 @@ def as_text(result: ScanResult) -> str:
     lines.append(f"  Agents detected     : {len(result.agents_found)}")
     lines.append(f"  Repo/agent pairs    : {total}")
     lines.append(f"  Covered             : {covered}")
+    lines.append(f"  Broken hooks        : {broken}")
     lines.append(f"  Shadow hooks        : {shadow}")
     lines.append(f"  Unguarded           : {unguarded}")
     lines.append(f"  Passive Monitoring  : {artifact_only + external_brain}")
@@ -240,6 +243,7 @@ def as_json(result: ScanResult) -> str:
             "agents_found": agents_count,
             "repo_agent_pairs": len(result.gap_results),
             "covered": sum(1 for g in result.gap_results if g.status == "COVERED"),
+            "broken_hooks": sum(1 for g in result.gap_results if g.status == "BROKEN_HOOK"),
             "shadow_hooks": sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK"),
             "artifact_only": sum(1 for g in result.gap_results if g.status in ("ARTIFACT_ONLY", "EXTERNAL_BRAIN")),
             "unguarded": sum(1 for g in result.gap_results if g.status == "UNGUARDED"),
@@ -271,6 +275,7 @@ def as_json(result: ScanResult) -> str:
                 "inherited": g.inherited,
                 "config_path": g.config_path,
                 "artifact_files": g.artifact_files,
+                "hook_healthy": g.hook_healthy,
             }
             for g in result.gap_results
         ],
@@ -284,6 +289,7 @@ def as_json(result: ScanResult) -> str:
                 "agent": s.agent,
                 "source": s.source,
                 "tool_count": s.tool_count,
+                "capability_tier": s.capability_tier,
             }
             for s in result.mcp_servers
         ],

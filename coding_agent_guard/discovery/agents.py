@@ -365,4 +365,108 @@ def detect_agents() -> list[AgentInfo]:
             auth_type=None,
         ))
 
+    # ── Ollama (local LLM server) ─────────────────────────────────────────────
+    ollama_path = shutil.which("ollama") or _home_dir_exists(".ollama")
+    if ollama_path:
+        found.append(AgentInfo(
+            name="Ollama",
+            version=_path_version("ollama", "--version") if shutil.which("ollama") else None,
+            install_path=ollama_path,
+            install_method="path" if shutil.which("ollama") else "app",
+            auth_type=None,
+        ))
+
+    # ── LM Studio ─────────────────────────────────────────────────────────────
+    lmstudio_path = (
+        _app_data_dir_exists("LM-Studio") or
+        _app_installed_macos("LM Studio") or
+        _home_dir_exists(".lmstudio")
+    )
+    if lmstudio_path:
+        found.append(AgentInfo(
+            name="LM Studio",
+            version=None,
+            install_path=lmstudio_path,
+            install_method="app",
+            auth_type=None,
+        ))
+
+    # ── Open Interpreter ──────────────────────────────────────────────────────
+    interp_ver = _pip_package_version("open-interpreter")
+    interp_path = shutil.which("interpreter") or _home_dir_exists(".openinterpreter")
+    if interp_ver or interp_path:
+        found.append(AgentInfo(
+            name="Open Interpreter",
+            version=interp_ver or _path_version("interpreter", "--version"),
+            install_path=interp_path or "(pip)",
+            install_method="pip" if interp_ver else "path",
+            auth_type="API key (env)" if os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY") else None,
+        ))
+
+    # ── GitHub Copilot CLI (gh extension) ─────────────────────────────────────
+    gh_path = shutil.which("gh")
+    if gh_path:
+        # Check if copilot extension is installed
+        gh_ext_out = _run("gh", "extension", "list")
+        if "copilot" in gh_ext_out.lower():
+            found.append(AgentInfo(
+                name="GitHub Copilot CLI",
+                version=None,
+                install_path=gh_path,
+                install_method="path",
+                auth_type="OAuth (GitHub)" if gh_path else None,
+            ))
+
+    return found
+
+
+# ── CI/CD pipeline agent detection ───────────────────────────────────────────
+
+_CICD_ACTION_PATTERNS: list[tuple[str, str]] = [
+    ("anthropic-ai/claude-github-action", "Claude (GitHub Action)"),
+    ("anthropics/claude-code-action",     "Claude Code (GitHub Action)"),
+    ("github/copilot-workspace-action",   "Copilot Workspace (GitHub Action)"),
+    ("devin-ai-integration/devin-action", "Devin (GitHub Action)"),
+    ("google-github-actions/gemini",      "Gemini (GitHub Action)"),
+    ("openai/openai-action",              "OpenAI (GitHub Action)"),
+    ("continuedev/continue-action",       "Continue.dev (GitHub Action)"),
+]
+
+
+def detect_cicd_agents(scan_root: str) -> list[AgentInfo]:
+    """Scan .github/workflows/*.yml in repos under scan_root for AI agent actions."""
+    found: list[AgentInfo] = []
+    root = Path(scan_root).expanduser().resolve()
+    seen: set[str] = set()
+
+    def _walk(p: Path, depth: int) -> None:
+        if depth > 4:
+            return
+        workflows_dir = p / ".github" / "workflows"
+        if workflows_dir.is_dir():
+            for wf_file in sorted(workflows_dir.glob("*.yml")):
+                try:
+                    text = wf_file.read_text(encoding="utf-8", errors="replace")
+                    for pattern, agent_name in _CICD_ACTION_PATTERNS:
+                        if pattern.lower() in text.lower():
+                            key = f"{agent_name}:{wf_file}"
+                            if key not in seen:
+                                seen.add(key)
+                                found.append(AgentInfo(
+                                    name=agent_name,
+                                    version=None,
+                                    install_path=str(wf_file),
+                                    install_method="ci_pipeline",
+                                    auth_type="CI secrets",
+                                ))
+                except OSError:
+                    continue
+        try:
+            for child in sorted(p.iterdir()):
+                if child.is_dir() and not child.name.startswith(".") and child.name != "node_modules":
+                    _walk(child, depth + 1)
+        except PermissionError:
+            pass
+
+    _walk(root, 0)
     return found

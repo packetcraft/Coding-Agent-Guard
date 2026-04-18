@@ -208,6 +208,145 @@ def _check_api_keys_files(scan_root: str, counter: _Counter) -> list[Finding]:
     return findings
 
 
+# ── Agent memory file secrets scan ───────────────────────────────────────────
+
+_MEMORY_SECRET_PATTERN = re.compile(
+    r"(sk-[A-Za-z0-9\-_]{20,}"             # OpenAI / Anthropic sk- keys
+    r"|AIza[A-Za-z0-9_\-]{35}"             # Google API keys
+    r"|ghp_[A-Za-z0-9]{36}"               # GitHub personal access tokens
+    r"|gho_[A-Za-z0-9]{36}"               # GitHub OAuth tokens
+    r"|ANTHROPIC_API_KEY\s*[=:]\s*\S{10,}"
+    r"|OPENAI_API_KEY\s*[=:]\s*\S{10,}"
+    r"|GEMINI_API_KEY\s*[=:]\s*\S{10,}"
+    r")",
+)
+
+_MEMORY_PATHS = [
+    Path("~/.claude/CLAUDE.md"),
+    Path("~/.claude/memory.md"),
+    Path("~/.gemini/GEMINI.md"),
+    Path("~/.gemini/memory.md"),
+]
+
+
+def _check_memory_files_secrets(counter: _Counter) -> list[Finding]:
+    findings: list[Finding] = []
+    candidates: list[Path] = [p.expanduser() for p in _MEMORY_PATHS]
+
+    # Also include brain session files (already identified as exhaust)
+    brain_root = _home() / ".gemini" / "antigravity" / "brain"
+    if brain_root.exists():
+        for sess_dir in brain_root.iterdir():
+            if sess_dir.is_dir():
+                for art_name in ["implementation_plan.md", "walkthrough.md", "task.md"]:
+                    f = sess_dir / art_name
+                    if f.exists():
+                        candidates.append(f)
+
+    for mem_file in candidates:
+        if not mem_file.exists():
+            continue
+        try:
+            text = mem_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        matches = _MEMORY_SECRET_PATTERN.findall(text)
+        if matches:
+            pattern_types = set()
+            for m in matches:
+                if m.startswith("sk-"):
+                    pattern_types.add("API key (sk-)")
+                elif m.startswith("AIza"):
+                    pattern_types.add("Google API key")
+                elif m.startswith("ghp_"):
+                    pattern_types.add("GitHub PAT")
+                elif m.startswith("gho_"):
+                    pattern_types.add("GitHub OAuth token")
+                else:
+                    pattern_types.add("env-style key assignment")
+            findings.append(Finding(
+                id=counter.next(),
+                category="SECRET_IN_AGENT_MEMORY",
+                severity="HIGH",
+                agent=None,
+                source=str(mem_file),
+                detail=(
+                    f"Credential pattern(s) detected in agent memory file: "
+                    f"{', '.join(sorted(pattern_types))}. "
+                    "Memory files are read by the agent at session start and may be exfiltrated "
+                    "via MCP tools or prompt injection."
+                ),
+                remediation=(
+                    "Remove credential values from memory files. "
+                    "Rotate any exposed keys immediately. "
+                    f"Scrub file: {mem_file}"
+                ),
+            ))
+    return findings
+
+
+# ── Dangerous MCP capability findings ────────────────────────────────────────
+
+_HIGH_RISK_TIERS = {"exec", "network"}
+
+
+def _check_dangerous_mcp_capabilities(mcp_servers: list[McpServer], counter: _Counter) -> list[Finding]:
+    findings: list[Finding] = []
+    for s in mcp_servers:
+        tier = s.capability_tier
+        if tier not in _HIGH_RISK_TIERS:
+            continue
+        sev = "HIGH" if tier == "exec" else "MEDIUM"
+        findings.append(Finding(
+            id=counter.next(),
+            category=f"DANGEROUS_MCP_CAPABILITY_{tier.upper().replace('-', '_')}",
+            severity=sev,
+            agent=s.agent,
+            source=s.source,
+            detail=(
+                f"MCP server '{s.name}' classified as capability tier '{tier}'. "
+                + (
+                    "This server can likely execute arbitrary code or spawn subprocesses. "
+                    if tier == "exec" else
+                    "This server can make outbound network requests or access external services. "
+                )
+                + f"Transport: {s.transport}. Trust: {'YES' if s.trust else 'no'}."
+            ),
+            remediation=(
+                "Audit the tools this server exposes. "
+                "Set trust=false to require explicit approval per call. "
+                "Consider removing if not actively needed."
+            ),
+        ))
+    return findings
+
+
+# ── CI/CD pipeline agent findings ─────────────────────────────────────────────
+
+def _check_cicd_agents(agents_found: list, counter: _Counter) -> list[Finding]:
+    findings: list[Finding] = []
+    cicd_agents = [a for a in agents_found if a.install_method == "ci_pipeline"]
+    for a in cicd_agents:
+        findings.append(Finding(
+            id=counter.next(),
+            category="CICD_AGENT_UNGUARDED",
+            severity="MEDIUM",
+            agent=a.name,
+            source=a.install_path,
+            detail=(
+                f"AI agent '{a.name}' is embedded in a CI/CD workflow at '{a.install_path}'. "
+                "Pipeline agents have no hook interception layer — all tool calls run unguarded. "
+                "Compromised workflow secrets give an attacker full agent capability."
+            ),
+            remediation=(
+                "Review the workflow YAML for least-privilege secret exposure. "
+                "Add a code-review gate (branch protection) before AI-authored commits merge. "
+                "Consider wrapping the action with a policy check step."
+            ),
+        ))
+    return findings
+
+
 # ── Remote MCP trust=true findings ───────────────────────────────────────────
 
 def _check_remote_mcp_trust(mcp_servers: list[McpServer], counter: _Counter) -> list[Finding]:
@@ -256,6 +395,25 @@ def _check_unguarded_repos(gap_results: list, agents_found: list, counter: _Coun
                     + (" Note: Antigravity IDE app not found; this may be a residual trace." if is_trace else "")
                 ),
                 remediation=f'Run: python install_hooks.py "{g.repo_path}"' if not is_trace else "Delete .agents/ dir if unused, or install hooks.",
+            ))
+
+        elif g.status == "BROKEN_HOOK":
+            findings.append(Finding(
+                id=counter.next(),
+                category="BROKEN_HOOK",
+                severity="HIGH",
+                agent=g.agent,
+                source=g.repo_path,
+                detail=(
+                    f"{g.agent} has a guard hook registered in '{g.repo_path}' "
+                    f"(command: '{g.hook_command}') but the binary cannot be resolved. "
+                    "The repo appears COVERED but the guard is not actually running — "
+                    "tool calls pass through without inspection."
+                ),
+                remediation=(
+                    "Reinstall Coding Agent Guard or fix the hook command path. "
+                    f"Run: coding-agent-guard install --repo \"{g.repo_path}\""
+                ),
             ))
 
         elif g.status == "SHADOW_HOOK":
@@ -330,6 +488,9 @@ def analyze(
     findings.extend(_check_orphaned_hooks(counter))
     findings.extend(_check_api_keys_env(counter))
     findings.extend(_check_api_keys_files(scan_root, counter))
+    findings.extend(_check_memory_files_secrets(counter))
     findings.extend(_check_remote_mcp_trust(mcp_servers, counter))
+    findings.extend(_check_dangerous_mcp_capabilities(mcp_servers, counter))
+    findings.extend(_check_cicd_agents(agents_found, counter))
     findings.extend(_check_unguarded_repos(gap_results, agents_found, counter))
     return findings

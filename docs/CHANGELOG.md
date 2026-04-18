@@ -5,6 +5,95 @@ All notable changes to the **Coding Agent Guard** project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-04-18
+
+### Added
+
+**AI Posture & Discovery — Major Enhancements**
+
+#### What Was Implemented
+
+| # | Feature | Files Changed |
+|---|---------|--------------|
+| 1 | **Temporal Posture Drift** (`--diff`) | `scanner.py` — `diff_scans()`, `load_all_scans()`, CLI flag |
+| 2 | **Hook Liveness Validation** (`BROKEN_HOOK`) | `gap_analyzer.py` — `_check_hook_liveness()`, `trust_analyzer.py` — BROKEN_HOOK finding |
+| 3 | **Wider Agent Detection** | `agents.py` — Ollama, LM Studio, Open Interpreter, Copilot CLI |
+| 4 | **CI/CD Pipeline Agents** | `agents.py` — `detect_cicd_agents()`, `trust_analyzer.py` — CICD_AGENT_UNGUARDED finding |
+| 5 | **MCP Capability Risk Scoring** | `mcp_inventory.py` — `_classify_capability_tier()`, `trust_analyzer.py` — DANGEROUS_MCP_CAPABILITY finding |
+| 6 | **Sensitive Data in Memory Files** | `trust_analyzer.py` — `_check_memory_files_secrets()`, HIGH severity finding |
+| 7 | **Remediation Automation** (`--fix`) | `scanner.py` — `_apply_fix()`, interactive hook writer |
+| 8 | **Posture Score Trend + Scan Diff** | `dashboard.py` — Plotly trend chart, drift panel, BROKEN_HOOK colors, capability tier column |
+
+#### Test Plan
+
+**1. Temporal Posture Drift (`--diff`)**
+```bash
+coding-agent-guard shadow-ai
+coding-agent-guard shadow-ai --diff
+```
+Verify: Shows "No changes" on identical runs. Edit a `.claude/settings.json` to remove a hook between runs — the diff should show the repo under "Lost protection".
+
+**2. Hook Liveness Validation (`BROKEN_HOOK`)**
+```bash
+echo '{"hooks":{"PreToolUse":[{"matcher":".*","hooks":[{"type":"command","command":"/nonexistent/coding-agent-guard pre-tool-use"}]}]}}' > /tmp/test-repo/.claude/settings.json
+coding-agent-guard shadow-ai --root /tmp
+```
+Verify: Repo appears as `BROKEN_HOOK` (not `COVERED`) with a HIGH severity `BROKEN_HOOK` finding.
+
+**3. Wider Agent Detection (Ollama, LM Studio, etc.)**
+```bash
+ollama --version  # confirm installed
+coding-agent-guard shadow-ai --output json | python -m json.tool | grep -i "ollama"
+```
+Verify: Ollama appears in `agents` array with `install_method: "path"` or `"app"`.
+
+**4. CI/CD Pipeline Agent Detection**
+```bash
+mkdir -p /tmp/test-cicd/.github/workflows
+echo "uses: anthropic-ai/claude-github-action@v1" > /tmp/test-cicd/.github/workflows/ai.yml
+coding-agent-guard shadow-ai --root /tmp/test-cicd --output json | python -m json.tool | grep -i "github action"
+```
+Verify: `"Claude (GitHub Action)"` appears in agents with `install_method: "ci_pipeline"`, and a `CICD_AGENT_UNGUARDED` MEDIUM finding is emitted.
+
+**5. MCP Capability Risk Scoring**
+```bash
+# Add an exec-tier MCP server to ~/.claude/settings.json
+# e.g. {"mcpServers": {"bash-exec": {"command": "bash-mcp-server"}}}
+coding-agent-guard shadow-ai --output json | python -m json.tool | grep -A2 "capability_tier"
+```
+Verify: `"bash-exec"` gets `capability_tier: "exec"`, and a `DANGEROUS_MCP_CAPABILITY_EXEC` HIGH finding appears.
+
+**6. Sensitive Data in Memory Files**
+```bash
+echo "sk-ant-test12345678901234567890" >> ~/.claude/CLAUDE.md
+coding-agent-guard shadow-ai --output json | python -m json.tool | grep "SECRET_IN_AGENT_MEMORY"
+# Clean up after test
+```
+Verify: `SECRET_IN_AGENT_MEMORY` HIGH finding appears pointing to `~/.claude/CLAUDE.md`.
+
+**7. Remediation Auto-fix (`--fix`)**
+```bash
+mkdir -p /tmp/test-unguarded/.claude
+echo '{}' > /tmp/test-unguarded/.claude/settings.json && git init /tmp/test-unguarded
+coding-agent-guard shadow-ai --root /tmp/test-unguarded --fix
+cat /tmp/test-unguarded/.claude/settings.json
+```
+Verify: `settings.json` now contains `hooks.PreToolUse` and `hooks.PostToolUse` entries with `coding-agent-guard` commands.
+
+**8. Posture Score Trend + Dashboard**
+```bash
+# Run 3+ scans to build history
+coding-agent-guard shadow-ai && coding-agent-guard shadow-ai && coding-agent-guard shadow-ai
+streamlit run coding_agent_guard/ui/dashboard.py
+```
+Navigate to **AI Posture & Discovery** tab. Verify:
+- "Posture Maturity Score — Trend" line chart appears (requires ≥ 2 scans in history)
+- "Drift vs Previous Scan" panel shows score delta and highlights changes
+- MCP table has a "Capability Risk" column
+- BROKEN_HOOK repos appear in bright red in the coverage table
+
+---
+
 ## [1.1.2] - 2026-04-18
 
 ### Added
