@@ -89,10 +89,11 @@ start.bat     # Windows CMD
 
 Opens the Streamlit dashboard at **http://localhost:8501** with four tabs:
 
-- **Live Feed** — auto-refreshing view of current tool calls and verdicts
-- **Audit Explorer** — filterable history of all security events (agent, session, tool, verdict, keyword)
-- **Security Dashboard** — advanced analytics including block rate trends, agent distribution, inspection method breakdowns, and P50/P95/P99 latency stats
-- **Shadow AI** — posture scan: installed agents, hook coverage map, MCP surface, trust findings
+- **📘 System Blueprint** — architecture overview, hook interception strategy, and enforcement modes
+- **📡 Live Feed** — auto-refreshing view of current tool calls and verdicts
+- **🔍 Forensics & Logs** — filterable history of all security events
+- **📊 Dashboard** — advanced analytics including block rate trends and latency stats
+- **🛡️ AI Posture Discovery** — posture scan: installed agents, hook coverage map, and trust findings
 
 The UI features a premium **Tokyo Night-inspired dark theme** ported from the LLM Security Workbench for a unified professional experience.
 

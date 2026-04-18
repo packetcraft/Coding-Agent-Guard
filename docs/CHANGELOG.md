@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Session Intelligence**: Comprehensive Session Summary table with branch and commit metadata.
 - **Hook Coverage Matrix**: Real-time visibility of protected tool surfaces in the sidebar.
 - **Premium UX Styling**: Ported the Tokyo Night-inspired theme (Streamlit sub-component) from LLM Security Workbench.
+- **Improved Information Hierarchy**: Reordered dashboard tabs to make "System Blueprint" (architecture & guide) the default entry page.
+- **Premium Nomenclature**: Updated tab names to more professional security-centric labels (Live Feed, Forensics & Logs, Dashboard, AI Posture Discovery).
 
 ### Changed
 - **Dashboard Layout**: Optimized UI from 2-column to 3-column layout for higher information density.

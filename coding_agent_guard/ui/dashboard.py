@@ -817,9 +817,12 @@ def main() -> None:
     st.markdown("## 🛡️ Coding Agent Guard Dashboard")
     st.caption(f"Inspecting audit logs from: `{audit_path}`")
 
-    tab_feed, tab_explorer, tab_dashboard, tab_shadow, tab_how = st.tabs([
-        "Live Feed", "Audit Explorer", "Security Dashboard", "Shadow AI", "How it Works",
+    tab_how, tab_feed, tab_explorer, tab_dashboard, tab_shadow = st.tabs([
+        "📘 System Blueprint", "📡 Live Feed", "🔍 Forensics & Logs", "📊 Dashboard", "🛡️ AI Posture Discovery",
     ])
+
+    with tab_how:
+        _render_how_it_works()
 
     with tab_feed:
         _render_live_feed(str(audit_path))
@@ -832,9 +835,6 @@ def main() -> None:
 
     with tab_shadow:
         _render_shadow_ai(str(audit_path))
-
-    with tab_how:
-        _render_how_it_works()
 
 
 if __name__ == "__main__":
