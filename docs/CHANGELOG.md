@@ -14,7 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Hook Coverage Matrix**: Real-time visibility of protected tool surfaces in the sidebar.
 - **Premium UX Styling**: Ported the Tokyo Night-inspired theme (Streamlit sub-component) from LLM Security Workbench.
 - **Improved Information Hierarchy**: Reordered dashboard tabs to make "System Blueprint" (architecture & guide) the default entry page.
-- **Premium Nomenclature**: Updated tab names to more professional security-centric labels (Live Feed, Forensics & Logs, Dashboard, AI Posture Discovery).
+- **Premium Nomenclature**: Updated tab names:
+    - **🔍 Forensics & Logs** — filterable history of all security events
+    - **📊 Dashboard** — advanced analytics including block rate trends and latency stats
+    - **🛡️ AI Posture & Discovery** — posture scan: installed agents, hook coverage map, and trust findings
+- **Visual Consistency**: Synchronized `BLOCK_AUDITED` verdict highlights to "Mango Yellow" across all analytics views.
 
 ### Changed
 - **Dashboard Layout**: Optimized UI from 2-column to 3-column layout for higher information density.

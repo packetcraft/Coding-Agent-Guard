@@ -16,6 +16,7 @@ _VERDICT_COLOUR = {
     "ALLOW":       "#9ECE6A",   # green
     "ALLOWLISTED": "#7AA2F7",   # blue
     "BLOCK":       "#F7768E",   # red
+    "BLOCK_AUDITED": "#F59E0B", # mango yellow
     "ERROR":       "#E0AF68",   # amber
 }
 
@@ -23,6 +24,7 @@ _VERDICT_ICON = {
     "ALLOW":       "ALLOW",
     "ALLOWLISTED": "SKIP",
     "BLOCK":       "BLOCK",
+    "BLOCK_AUDITED": "AUDIT",
     "ERROR":       "ERROR",
 }
 
@@ -818,7 +820,7 @@ def main() -> None:
     st.caption(f"Inspecting audit logs from: `{audit_path}`")
 
     tab_how, tab_feed, tab_explorer, tab_dashboard, tab_shadow = st.tabs([
-        "📘 System Blueprint", "📡 Live Feed", "🔍 Forensics & Logs", "📊 Dashboard", "🛡️ AI Posture Discovery",
+        "📘 System Blueprint", "📡 Live Feed", "🔍 Forensics & Logs", "📊 Dashboard", "🛡️ AI Posture & Discovery",
     ])
 
     with tab_how:
