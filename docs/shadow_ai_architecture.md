@@ -25,6 +25,7 @@ coding-agent-guard shadow-ai [--root PATH]
     │  Phase 1 — Inventory               │
     │  ├─ agents.detect_agents()         │  What agents are installed?
     │  ├─ config_crawler.crawl()         │  What configs & hooks exist?
+    │  ├─ config_crawler._probe_brain()  │  Any active home-dir sessions?
     │  └─ mcp_inventory.inventory()      │  What MCP servers are registered?
     │                                    │
     │  Phase 2 — Analysis                │
@@ -77,6 +78,14 @@ For each config file found, it parses:
 - MCP server count
 - Whether any hook command matches known guard patterns (`coding-agent-guard`, `agentic_guard`)
 
+### External Brain Probe (`discovery/config_crawler.py`)
+
+`_probe_antigravity_brain()` audits the local machine's "Digital Exhaust" to identify agents that don't use standard config files:
+- Probes `~/.gemini/antigravity/brain/` for session artifacts.
+- Extracts workspace file URIs (`file:///...`) from plans and walkthroughs.
+- Maps discovered sessions back to absolute repository paths.
+- Critical for identifying "Shadow AI" that has been cleaned from the project folder.
+
 ### MCP Inventory (`discovery/mcp_inventory.py`)
 
 `inventory(scan_root)` collects MCP server registrations from seven sources in priority order:
@@ -104,8 +113,10 @@ Remote-transport servers (HTTP URLs) with `trust: true` are flagged as `REMOTE_M
 | Status | Meaning |
 |---|---|
 | `COVERED` | At least one hook in the resolved chain matches a known guard pattern |
-| `SHADOW_HOOK` | Hooks exist but none are recognized guard commands — an unknown tool occupies the slot |
-| `UNGUARDED` | No hooks registered for this agent in this repo or any parent config |
+| `EXTERNAL_BRAIN` | Agent detected via home-dir session audit for this workspace |
+| `ARTIFACT_ONLY` | Agent detected via in-repo artifacts (`task.md`, etc.) |
+| `SHADOW_HOOK` | Hooks exist but none are recognized guard commands |
+| `UNGUARDED` | No hooks or artifacts/brain sessions found for this agent |
 
 **Why `SHADOW_HOOK` matters:** An attacker-controlled or misconfigured tool registered as a hook can intercept tool calls before (or instead of) a real guard. Shadow AI surfaces this so teams can audit what is actually running in hook position.
 
@@ -120,6 +131,8 @@ Remote-transport servers (HTTP URLs) with `trust: true` are flagged as `REMOTE_M
 | `API_KEY_IN_ENV` | MEDIUM | API key pattern (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.) in env vars |
 | `API_KEY_IN_FILE` | MEDIUM | API key pattern found in `.env` files under scan root |
 | `OVERLY_BROAD_FOLDER_TRUST` | MEDIUM | Gemini `trustedFolders` entry covers a very broad path (e.g., home dir) |
+| `SHADOW_AI_EXTERNAL_BRAIN` | INFO | Active brain session detected via home-dir audit |
+| `PASSIVE_MONITORING_ACTIVE` | INFO | Agent detected via in-repo artifacts |
 | `SHADOW_HOOK` | LOW | Hook slot occupied by non-guard command |
 | `ORPHANED_HOOK` | LOW | Hook command binary no longer exists on disk |
 

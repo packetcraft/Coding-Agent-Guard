@@ -1,6 +1,6 @@
 # Shadow AI — Discovery Feature Plan
 
-**Status:** Phases 1 & 2 complete and shipped — Phases 3 & 4 planned  
+**Status:** Phases 1 & 2 Verified Complete (2026-04-18) — Phase 3 In Progress — Phase 4 Planned  
 **Priority:** Active development  
 **Audience:** IT / CISO teams — solving the "Shadow AI" problem on developer laptops
 
@@ -324,13 +324,11 @@ Phase 4 (live MCP enumeration) is the highest-risk work and is cleanly separable
 
 *Phases 1+2 = shippable MVP.*
 
-### Phase 3 — UI Controls & Continuous Monitoring (~2 days)
-**Delivers:** "Ongoing visibility without manual CLI runs."
-
-- Daily auto-scan: on first dashboard load of the day, run scan if last scan was >24h ago
-- **Scan History** section: delta between last two scans (new agents, new MCPs, newly unguarded repos highlighted in red)
-- **Suppression UI**: mark a finding as suppressed (known-safe). Suppressions stored in `audit/shadow_ai_suppressions.json`. Suppressed findings shown greyed-out with a "Restore" option.
-- Update CLI: `--diff` flag (compare to last scan, show deltas only)
+- [x] **Scan Now button**: Already shipped (Phase 2)
+- [ ] Daily auto-scan: Not yet implemented
+- [ ] Scan History / delta section: Not yet implemented
+- [ ] Suppression UI: Not yet implemented
+- [ ] Update CLI: `--diff` flag not yet implemented
 
 *Note: Scan Now button already shipped in Phase 2. Daily auto-scan and delta/suppression are the remaining Phase 3 items.*
 
@@ -366,3 +364,9 @@ Phase 4 (live MCP enumeration) is the highest-risk work and is cleanly separable
 2. Scan History / delta section — load last two scan records, diff `coverage_map` and `mcp_servers`; surface new/removed entries highlighted
 3. Suppression UI — `st.button("Suppress")` per finding; write to `audit/shadow_ai_suppressions.json`; filter suppressed findings from the main list, show greyed-out in a collapsed expander
 4. `--diff` CLI flag — print only changed items vs the previous scan record in `shadow_ai_scans.jsonl`
+
+---
+
+## Related Plans
+
+- [**IDE & Antigravity Audit Expansion**](file:///c:/Users/B006/Documents/github/Coding-Agent-Guard/docs/IDE_AUDIT_PLAN.md) — Follow-on plan for auditing agent artifacts and universal shell observation.

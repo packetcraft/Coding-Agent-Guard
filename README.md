@@ -10,8 +10,10 @@
 - **Smart Allowlist**: Fast-path bypass for common read-only commands (`ls`, `git status`, etc.) to minimize latency overhead.
 - **Protected Paths**: Hard-blocks any attempt by an agent to modify the guard's own configuration or hook files.
 - **Audit Logging**: Detailed JSONL logs of every tool call, verdict, latency, and redaction count, written per session.
-- **Multi-Agent Support**: Native hook adapters for Claude Code and Gemini CLI.
-- **Security Dashboard**: Streamlit UI for real-time monitoring and historical audit exploration with filtering by agent, session, tool, and verdict.
+- **Multi-Agent Support**: Native hook adapters for Claude Code and Gemini CLI; specialized observation for Antigravity, VS Code, and Zed.
+- **Shadow AI (Posturing)**: Continuous discovery scan of installed agents, hook coverage gaps, and hidden MCP servers. Probes local "Brain Sessions" to detect agents across the entire machine.
+- **External Brain Discovery**: Identifies active agents via "Digital Exhaust" in home directories, even if project artifacts are removed.
+- **Security Dashboard**: Premium Streamlit UI with dedicated tabs for **Live Feed**, **Audit Explorer**, and **Shadow AI** posture management.
 
 ## ⚠️ Audit-Only Mode (Default)
 
@@ -93,8 +95,8 @@ Opens the Streamlit dashboard at **http://localhost:8501** with four tabs:
 - **📡 Live Feed** — auto-refreshing view of current tool calls and verdicts
 - **🔍 Forensics & Logs** — filterable history of all security events
 - **📊 Dashboard** — analytics including block rate trends and latency stats
-- **🛡️ AI Posture & Discovery** — posture scan: IDE/Agent inventory, hook coverage map, trust findings, and Markdown exports
-- **🖥️ IDE Support** — specialized detection for VS Code, Zed, and Antigravity IDEs
+- **🛡️ Shadow AI** — posture scan: IDE/Agent inventory, hook coverage map, and trust findings.
+- **🖥️ IDE Support** — specialized detection for VS Code, Zed, and Antigravity IDEs.
 
 The UI features a premium **Tokyo Night-inspired dark theme** ported from the LLM Security Workbench for a unified professional experience.
 
@@ -178,7 +180,20 @@ Copy-Item C:\path\to\Coding-Agent-Guard\agent_configs\gemini_settings.template.j
 
 > The templates use `"command": "coding-agent-guard"` which requires the venv to be active. If the venv may not always be active, use the automated installer — it writes the absolute path to the venv executable.
 
-### Shadow AI Posture Scan
+### 🐧 Universal Shell Guard & Antigravity
+For IDE-based agents (like Antigravity) that don't support native hooks, or to passively audit any shell-based agent, use the `shell_guard` adapter:
+
+```bash
+python -m coding_agent_guard.adapters.shell_guard <command>
+```
+
+**Example: Guarding Antigravity**
+```bash
+python -m coding_agent_guard.adapters.shell_guard antigravity
+```
+This wraps the agent process, logging every shell command it executes to the audit trail while allowing them to run in AUDIT mode.
+
+### 📡 Shadow AI Posture Scan
 
 Run a discovery scan to audit all AI agents, hook coverage, MCP servers, and trust settings on the machine:
 
@@ -193,7 +208,7 @@ coding-agent-guard shadow-ai --output json               # JSON output for SIEM/
 coding-agent-guard shadow-ai --no-audit                  # skip writing to audit log
 ```
 
-Results are also available in the **Shadow AI** tab of the dashboard.
+Results are processed into the **Shadow AI** tab of the dashboard and written to `audit/shadow_ai_scans.jsonl`. The scan includes an **External Brain Probe** that maps Antigravity sessions from `~/.gemini/antigravity/brain/` back to your project workspaces.
 
 ## ⚙️ Configuration
 

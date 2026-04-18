@@ -252,6 +252,7 @@ def _check_unguarded_repos(gap_results: list, counter: _Counter) -> list[Finding
                 ),
                 remediation=f'Run: python install_hooks.py "{g.repo_path}"',
             ))
+
         elif g.status == "SHADOW_HOOK":
             findings.append(Finding(
                 id=counter.next(),
@@ -268,7 +269,44 @@ def _check_unguarded_repos(gap_results: list, counter: _Counter) -> list[Finding
                     "If not, replace with Coding Agent Guard."
                 ),
             ))
+        elif g.status == "ARTIFACT_ONLY":
+            findings.append(Finding(
+                id=counter.next(),
+                category="PASSIVE_MONITORING_ACTIVE",
+                severity="INFO",
+                agent=g.agent,
+                source=g.repo_path,
+                detail=(
+                    f"Artifact-based agent '{g.agent}' detected. Active artifacts found: "
+                    f"{', '.join(g.artifact_files)}. The guard is passively monitoring "
+                    "agent state changes but NOT intercepting individual tool calls."
+                ),
+                remediation=(
+                    "For full enforcement, wrap the agent command with 'shell_guard'. "
+                    "This enables active Action Guard and Injection Guard primitives."
+                ),
+            ))
+        elif g.status == "EXTERNAL_BRAIN":
+            findings.append(Finding(
+                id=counter.next(),
+                category="SHADOW_AI_EXTERNAL_BRAIN",
+                severity="INFO",
+                agent=g.agent,
+                source=f"Brain Session: {g.external_brain_session}",
+                detail=(
+                    f"Active Antigravity brain session '{g.external_brain_session}' detected "
+                    "for this workspace via home directory audit. No artifacts found in project repo. "
+                    "This indicates passive monitoring via 'Digital Exhaust'."
+                ),
+                remediation=(
+                    "Clean up home directory brain storage if you wish to completely remove "
+                    "agent traces, or install a hook for active enforcement."
+                ),
+            ))
     return findings
+
+
+
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

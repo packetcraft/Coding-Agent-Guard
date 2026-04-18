@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD): Coding Agent Guard
 
 ## 1. Executive Summary
-**Coding Agent Guard** is a standalone security primitive designed to provide an "Active Defense" layer for autonomous AI coding agents (e.g., Claude Code, Gemini CLI, GitHub Copilot CLI). It intercepts tool executions and outputs in real-time to prevent destructive operations, unauthorized data exfiltration, and prompt injection attacks.
+**Coding Agent Guard** is a dual-mode security primitive designed to provide an **"Active Defense"** layer and **"Postural Intelligence"** for autonomous AI coding agents (e.g., Claude Code, Gemini CLI, Antigravity, VS Code). It intercepts tool executions in real-time and provides a continuous, queryable inventory of the AI attack surface on a machine.
 
 ## 2. Problem Statement
 Autonomous agents possess the capability to execute shell commands and modify files. While powerful, this introduces significant risks:
@@ -14,8 +14,9 @@ Existing security measures are often "Passive" (logs only). **Coding Agent Guard
 ## 3. Goals & Objectives
 - **Standalone Portability**: Decouple the guard from the research workbench into a lightweight, installable package.
 - **Real-time Enforcement**: Provide sub-second latency for security verdicts.
-- **Multi-Agent Compatibility**: Support major agentic CLIs through a unified adapter interface.
+- **Multi-Agent Compatibility**: Support major agentic CLIs and IDE-based agents through a unified adapter and discovery framework.
 - **Privacy First**: Perform all classifications locally using Ollama to ensure no code or secrets leave the user's machine.
+- **Postural Intelligence (Shadow AI)**: Provide IT/CISO teams with visibility into all installed agents, configured MCP servers, and unguarded repositories.
 - **Human-in-the-Loop**: Enable a path toward interactive approval for high-risk actions.
 
 ## 4. Target Audience
@@ -30,13 +31,16 @@ Existing security measures are often "Passive" (logs only). **Coding Agent Guard
 - **Secret Redaction**: Automatic masking of API keys and credentials in audit logs.
 - **Protected Paths**: Hard-block modifications to sensitive system or configuration files.
 - **Structured Auditing**: Generate JSONL logs for every action for forensic review.
-- **Security Dashboard**: Standalone Streamlit UI for real-time monitoring, audit exploration, and security metrics with advanced filtering (Agent, Session, Tool, Verdict).
+- **Security Dashboard**: Standalone Streamlit UI for real-time monitoring, audit exploration, and security metrics. Includes a dedicated **Shadow AI** tab for posture management.
+- **Gap Analysis**: Automated identification of unguarded (repo × agent) pairs across the filesystem.
+- **Passive Monitoring (Digital Exhaust)**: Detection of agents via in-repo artifacts (`task.md`) and external mapping of "Brain Sessions" in home directories to workspace paths.
+- **Posture Maturity Scoring**: Heuristic grading (0–100%) of repository security posture based on the monitoring layer active.
 
 ## 6. Roadmap (V2 - Future)
-- **Static Analysis Guard**: Intercept file writes to run `bandit` or `eslint-plugin-security`.
-- **Runtime Sandbox**: Automatically wrap shell commands in Docker/nsjail.
-- **Supply Chain Guard**: Detect malicious `pip`/`npm` package installations.
+- **Universal Shell Observation**: Audit-only shell wrappers to capture commands from any agent process regardless of native hook support.
 - **Interactive Approval UI**: Pause execution for human review via a lightweight UI (Streamlit).
+- **Runtime Sandbox**: Automatically wrap shell commands in Docker/nsjail.
+- **Static Analysis Guard**: Intercept file writes to run `bandit` or `eslint-plugin-security`.
 
 ## 8. Technical Constraints
 - **Language**: Python 3.9+

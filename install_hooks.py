@@ -129,12 +129,70 @@ def install_hooks(target_dir: str, force: bool = False) -> None:
     print(f"[Gemini] {action}: {gemini_settings_path}")
 
 
+def wrap_mcp(target_config: str, force: bool = False) -> None:
+    config_path = Path(target_config).resolve()
+    if not config_path.exists():
+        print(f"Error: {target_config} does not exist.")
+        return
+
+    data = _load_json(config_path)
+    mcp_servers = data.get("mcpServers", {})
+    if not mcp_servers:
+        print(f"No mcpServers found in {target_config}")
+        return
+
+    # Path to the shim
+    shim_py = Path(__file__).parent / "coding_agent_guard" / "adapters" / "mcp_shim.py"
+    # Use the venv python to ensure dependencies are available
+    venv_py = Path(__file__).parent / "venv" / "Scripts" / "python.exe"
+    if not venv_py.exists():
+        venv_py = Path(sys.executable)
+    
+    shim_cmd = f"{venv_py} {shim_py}".replace("\\", "/")
+
+    wrapped_count = 0
+    for name, entry in mcp_servers.items():
+        cmd = entry.get("command")
+        if not cmd:
+            continue
+        
+        # Don't double-wrap
+        if isinstance(cmd, list):
+            cmd_str = " ".join(str(c) for c in cmd)
+        else:
+            cmd_str = str(cmd)
+            
+        if "mcp_shim.py" in cmd_str:
+            continue
+            
+        # Wrap the command
+        args = entry.get("args", [])
+        original_full = [cmd] + args if isinstance(cmd, str) else cmd + args
+        
+        entry["command"] = str(venv_py).replace("\\", "/")
+        entry["args"] = [str(shim_py).replace("\\", "/")] + [str(c) for c in original_full]
+        wrapped_count += 1
+
+    if wrapped_count > 0:
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        print(f"[MCP] Wrapped {wrapped_count} servers in {target_config}")
+    else:
+        print(f"[MCP] No servers newly wrapped in {target_config}")
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     force = "--force" in sys.argv
+    mcp_mode = "--mcp" in sys.argv
 
     if not args:
-        print("Usage: python install_hooks.py <target_directory> [--force]")
-        print("  --force  Overwrite existing settings instead of merging")
+        print("Usage:")
+        print("  python install_hooks.py <target_directory> [--force]        # Install repo hooks")
+        print("  python install_hooks.py --mcp <config_file> [--force]      # Wrap MCP servers in config")
+        print("\nOptions:")
+        print("  --force  Overwrite existing settings / re-wrap already wrapped items")
+    elif mcp_mode:
+        wrap_mcp(args[0], force=force)
     else:
         install_hooks(args[0], force=force)

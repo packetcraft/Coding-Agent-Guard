@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -118,7 +119,10 @@ def _is_repo(path: Path) -> bool:
         (path / ".gemini").exists() or
         (path / ".zed").exists() or
         (path / ".agents").exists() or
-        (path / "AGENTS.md").exists()
+        (path / "AGENTS.md").exists() or
+        (path / "implementation_plan.md").exists() or
+        (path / "task.md").exists() or
+        (path / "walkthrough.md").exists()
     )
 
 
@@ -157,6 +161,77 @@ def _parent_config(repo: Path, filename: str) -> tuple[dict, str | None]:
             break
         current = current.parent
     return {}, None
+
+
+# Regex for file:/// URIs
+_URI_PATTERN = re.compile(r"file:///([a-zA-Z]:/[^ \n`\"'>]+|/[^ \n`\"'>]+)")
+
+
+def _probe_antigravity_brain() -> list[RepoConfig]:
+    """
+    Search the local Antigravity brain directory for session artifacts
+    that contain workspace file paths.
+    """
+    brain_root = _home() / ".gemini" / "antigravity" / "brain"
+    if not brain_root.exists():
+        return []
+
+    configs: list[RepoConfig] = []
+    # Key = normalized repo path, Value = RepoConfig
+    discovered: dict[str, RepoConfig] = {}
+
+    try:
+        for sess_dir in brain_root.iterdir():
+            if not sess_dir.is_dir():
+                continue
+            
+            # Look for recent artifacts
+            # Note: implementation_plan.md and walkthrough.md usually contain URIs
+            for art_name in ["implementation_plan.md", "walkthrough.md"]:
+                art_file = sess_dir / art_name
+                if not art_file.exists():
+                    continue
+                
+                try:
+                    content = art_file.read_text(encoding="utf-8", errors="replace")
+                    matches = _URI_PATTERN.findall(content)
+                    for path in matches:
+                        # Normalize path: convert to absolute
+                        norm_path = path.replace("\\", "/").rstrip("/")
+                        
+                        # Heuristic to find the repo root: 
+                        # Look for common markers if we were to walk up, 
+                        # but here we just try to find a parent that is a repo.
+                        p = Path(norm_path)
+                        repo_root = None
+                        
+                        # Walk up from the file path to find the repo root
+                        current = p if p.is_dir() else p.parent
+                        for _ in range(5):
+                            if (current / ".git").exists() or (current / ".claude").exists() or (current / ".gemini").exists():
+                                repo_root = current
+                                break
+                            if current.parent == current:
+                                break
+                            current = current.parent
+                        
+                        if not repo_root:
+                            continue
+
+                        repo_str = str(repo_root.resolve())
+                        if repo_str not in discovered:
+                            discovered[repo_str] = RepoConfig(
+                                repo_path=repo_str,
+                                agent="Antigravity (Brain Session)",
+                                config_path=str(art_file),
+                                external_brain_session=sess_dir.name
+                            )
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    return list(discovered.values())
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -307,5 +382,39 @@ def crawl(scan_root: str) -> list[RepoConfig]:
                 config_path=str(ag_file),
             ))
             seen.add((str(repo), "Antigravity/Shared"))
+
+        # ── Artifact Detection (Antigravity) ──────────────────────────────────
+        artifacts = []
+        for art in ["implementation_plan.md", "walkthrough.md", "task.md"]:
+            if (repo / art).exists():
+                artifacts.append(art)
+        
+        # Attach artifacts to existing Antigravity configs or create a new one
+        if artifacts:
+            ag_configs = [c for c in configs if c.repo_path == str(repo) and "Antigravity" in c.agent]
+            if ag_configs:
+                for c in ag_configs:
+                    c.artifact_files = artifacts
+            else:
+                # Create a "pseudo" Antigravity config if only artifacts exist
+                configs.append(RepoConfig(
+                    repo_path=str(repo),
+                    agent="Antigravity (Artifacts)",
+                    config_path=str(repo / artifacts[0]),
+                    artifact_files=artifacts
+                ))
+                seen.add((str(repo), "Antigravity (Artifacts)"))
+
+    # ── External Brain Discovery ──
+    brain_configs = _probe_antigravity_brain()
+    for bc in brain_configs:
+        try:
+            # Only include if it's within the scan_root (or scan_root is within it)
+            if Path(bc.repo_path).is_relative_to(root) or root.is_relative_to(Path(bc.repo_path)):
+                # Avoid duplicates
+                if not any(c.repo_path == bc.repo_path and "Antigravity" in c.agent for c in configs):
+                    configs.append(bc)
+        except Exception:
+            pass
 
     return configs

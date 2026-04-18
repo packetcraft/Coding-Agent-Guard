@@ -24,6 +24,15 @@ def analyze(repo_configs: list[RepoConfig]) -> list[GapResult]:
         elif non_guard_hooks:
             status = "SHADOW_HOOK"
             hook_command = non_guard_hooks[0].command
+        elif rc.artifact_files and "Artifacts" in rc.agent:
+            # Special case: Antigravity (Artifacts) has no native hooks
+            # but is being passively monitored via artifacts.
+            status = "ARTIFACT_ONLY"
+            hook_command = None
+        elif rc.external_brain_session:
+            # New case: Detected via external brain mapping
+            status = "EXTERNAL_BRAIN"
+            hook_command = None
         else:
             status = "UNGUARDED"
             hook_command = None
@@ -35,6 +44,9 @@ def analyze(repo_configs: list[RepoConfig]) -> list[GapResult]:
             hook_command=hook_command,
             inherited=rc.inherited_from is not None,
             config_path=rc.config_path,
+            artifact_files=rc.artifact_files,
+            external_brain_session=rc.external_brain_session
         ))
+
 
     return results

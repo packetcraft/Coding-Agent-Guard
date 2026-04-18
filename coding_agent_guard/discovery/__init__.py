@@ -29,16 +29,21 @@ class RepoConfig:
     hook_entries: list[HookEntry] = field(default_factory=list)
     mcp_server_count: int = 0
     inherited_from: str | None = None
+    artifact_files: list[str] = field(default_factory=list)
+    external_brain_session: str | None = None
 
 
 @dataclass
 class GapResult:
     repo_path: str
     agent: str
-    status: str  # "COVERED", "SHADOW_HOOK", "UNGUARDED"
+    status: str  # "COVERED", "SHADOW_HOOK", "ARTIFACT_ONLY", "EXTERNAL_BRAIN", "UNGUARDED"
     hook_command: str | None
     inherited: bool
     config_path: str | None
+    artifact_files: list[str] = field(default_factory=list)
+    external_brain_session: str | None = None
+
 
 
 @dataclass

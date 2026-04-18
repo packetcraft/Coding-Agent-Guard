@@ -6,12 +6,18 @@ import json
 from coding_agent_guard.discovery import ScanResult
 
 
-_STATUS_ORDER = {"UNGUARDED": 0, "SHADOW_HOOK": 1, "COVERED": 2}
+_STATUS_ORDER = {"UNGUARDED": 0, "EXTERNAL_BRAIN": 1, "ARTIFACT_ONLY": 2, "SHADOW_HOOK": 3, "COVERED": 4}
 _SEV_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
 
 
 def _status_icon(status: str) -> str:
-    return {"COVERED": "[OK]", "SHADOW_HOOK": "[!]", "UNGUARDED": "[X]"}.get(status, status)
+    return {
+        "COVERED": "[OK]",
+        "SHADOW_HOOK": "[!]",
+        "ARTIFACT_ONLY": "[?]",
+        "EXTERNAL_BRAIN": "[@]",
+        "UNGUARDED": "[X]",
+    }.get(status, status)
 
 
 def _sev_icon(severity: str) -> str:
@@ -56,7 +62,10 @@ def as_text(result: ScanResult) -> str:
             repo = g.repo_path
             if len(repo) > 50:
                 repo = "..." + repo[-47:]
-            lines.append(f"  {icon:<6} {g.status:<10} {g.agent:<12} {inh:<10} {repo}")
+            
+            artifacts_suffix = f" (Artifacts: {', '.join(g.artifact_files)})" if g.artifact_files else ""
+            brain_suffix = f" (Session: {g.external_brain_session[:8]})" if g.external_brain_session else ""
+            lines.append(f"  {icon:<6} {g.status:<14} {g.agent:<12} {inh:<10} {repo}{artifacts_suffix}{brain_suffix}")
     else:
         lines.append("  No repo/agent pairs found in scan root.")
 
@@ -100,6 +109,8 @@ def as_text(result: ScanResult) -> str:
     covered = sum(1 for g in result.gap_results if g.status == "COVERED")
     shadow = sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK")
     unguarded = sum(1 for g in result.gap_results if g.status == "UNGUARDED")
+    artifact_only = sum(1 for g in result.gap_results if g.status == "ARTIFACT_ONLY")
+    external_brain = sum(1 for g in result.gap_results if g.status == "EXTERNAL_BRAIN")
     high_findings = sum(1 for f in result.findings if f.severity == "HIGH")
     med_findings = sum(1 for f in result.findings if f.severity == "MEDIUM")
 
@@ -110,6 +121,8 @@ def as_text(result: ScanResult) -> str:
     lines.append(f"  Covered             : {covered}")
     lines.append(f"  Shadow hooks        : {shadow}")
     lines.append(f"  Unguarded           : {unguarded}")
+    lines.append(f"  Passive Monitoring  : {artifact_only + external_brain}")
+
     lines.append(f"  MCP servers         : {len(result.mcp_servers)}")
     lines.append(f"  Remote MCPs (trust) : {sum(1 for s in result.mcp_servers if s.transport == 'remote' and s.trust)}")
     lines.append(f"  High findings       : {high_findings}")
@@ -131,6 +144,14 @@ def as_markdown(result: ScanResult) -> str:
     total = len(result.gap_results)
     covered = sum(1 for g in result.gap_results if g.status == "COVERED")
     unguarded = sum(1 for g in result.gap_results if g.status == "UNGUARDED")
+    passive = sum(1 for g in result.gap_results if g.status in ("ARTIFACT_ONLY", "EXTERNAL_BRAIN"))
+    
+    # Maturity Score: Covered=1.0, Artifact=0.5, Shadow=0.2, Unguarded=0
+    shadow = sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK")
+    score = 0
+    if total > 0:
+        score = ((covered * 1.0) + (passive * 0.5) + (shadow * 0.2)) / total * 100
+
     ides_count = sum(1 for a in result.agents_found if any(x in a.name.lower() for x in ["vscode", "vs code", "zed", "antigravity", "cursor", "windsurf"]))
     agents_count = len(result.agents_found) - ides_count
 
@@ -140,6 +161,8 @@ def as_markdown(result: ScanResult) -> str:
     lines.append(f"- **Repo/Agent Pairs:** {total}")
     lines.append(f"- **Covered:** {covered} ({(covered/total*100 if total else 0):.1f}%)")
     lines.append(f"- **Unguarded:** {unguarded}")
+    lines.append(f"- **Passive Monitoring:** {passive}")
+    lines.append(f"- **Posture Maturity Score:** {score:.1f}%")
     lines.append(f"- **High Severity Findings:** {sum(1 for f in result.findings if f.severity == 'HIGH')}")
     lines.append("")
 
@@ -181,7 +204,8 @@ def as_markdown(result: ScanResult) -> str:
         )
         for g in sorted_gaps:
             inh = "yes" if g.inherited else "no"
-            lines.append(f"| {g.status} | {g.agent} | {inh} | `{g.repo_path}` |")
+            arts = f"<br>Artifacts: {', '.join(g.artifact_files)}" if g.artifact_files else ""
+            lines.append(f"| {g.status} | {g.agent} | {inh} | `{g.repo_path}`{arts} |")
     else:
         lines.append("No repo/agent pairs found.")
     lines.append("")
@@ -217,7 +241,9 @@ def as_json(result: ScanResult) -> str:
             "repo_agent_pairs": len(result.gap_results),
             "covered": sum(1 for g in result.gap_results if g.status == "COVERED"),
             "shadow_hooks": sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK"),
+            "artifact_only": sum(1 for g in result.gap_results if g.status in ("ARTIFACT_ONLY", "EXTERNAL_BRAIN")),
             "unguarded": sum(1 for g in result.gap_results if g.status == "UNGUARDED"),
+            "posture_maturity_score": ((sum(1 for g in result.gap_results if g.status == "COVERED") * 1.0) + (sum(1 for g in result.gap_results if g.status in ("ARTIFACT_ONLY", "EXTERNAL_BRAIN")) * 0.5) + (sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK") * 0.2)) / len(result.gap_results) * 100 if result.gap_results else 0,
             "mcp_servers": len(result.mcp_servers),
             "remote_mcps_trust_true": sum(
                 1 for s in result.mcp_servers if s.transport == "remote" and s.trust
@@ -244,6 +270,7 @@ def as_json(result: ScanResult) -> str:
                 "hook_command": g.hook_command,
                 "inherited": g.inherited,
                 "config_path": g.config_path,
+                "artifact_files": g.artifact_files,
             }
             for g in result.gap_results
         ],

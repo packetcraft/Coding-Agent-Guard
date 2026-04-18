@@ -490,13 +490,18 @@ _SEV_COLOUR = {
     "HIGH":   "#F7768E",
     "MEDIUM": "#E0AF68",
     "LOW":    "#9ECE6A",
+    "INFO":   "#7AA2F7",
 }
 
 _STATUS_COLOUR = {
-    "COVERED":     "#9ECE6A",
-    "SHADOW_HOOK": "#E0AF68",
-    "UNGUARDED":   "#F7768E",
+    "COVERED":        "#9ECE6A",
+    "SHADOW_HOOK":    "#E0AF68",
+    "ARTIFACT_ONLY":  "#7AA2F7",   # Blue for passive/artifacts
+    "EXTERNAL_BRAIN": "#BB9AF7",   # Purple for external discovery
+    "UNGUARDED":      "#F7768E",
 }
+
+_STATUS_ORD = ["UNGUARDED", "EXTERNAL_BRAIN", "ARTIFACT_ONLY", "SHADOW_HOOK", "COVERED"]
 
 
 def _sev_badge(severity: str) -> str:
@@ -627,7 +632,9 @@ def _render_shadow_ai(audit_path: str) -> None:
         lines.append(f"- **CLI Agents Detected:** {summ.get('agents_found', 0)}")
         lines.append(f"- **Repo/Agent Pairs:** {summ.get('repo_agent_pairs', 0)}")
         lines.append(f"- **Covered:** {summ.get('covered', 0)}")
+        lines.append(f"- **Passive Monitoring (Artifacts):** {summ.get('artifact_only', 0)}")
         lines.append(f"- **Unguarded:** {summ.get('unguarded', 0)}")
+        lines.append(f"- **Posture Maturity Score:** {summ.get('posture_maturity_score', 0):.1f}%")
         lines.append("")
 
         lines.append("## Findings")
@@ -652,16 +659,47 @@ def _render_shadow_ai(audit_path: str) -> None:
     )
 
     # ── Metric row ────────────────────────────────────────────────────────────
-    m0, m1, m2, m3, m4, m5, m6, m7 = st.columns(8)
+    m0, m1, m2, m3, m3a, m4, m5, m6, m7, m8 = st.columns(10)
     m0.metric("IDEs",         summary.get("ides_found", 0))
     m1.metric("Agents",       summary.get("agents_found", 0))
     m2.metric("Pairs",        summary.get("repo_agent_pairs", 0))   # repo × agent
     m3.metric("Covered",      summary.get("covered", 0))
+    m3a.metric("Artifacts",   summary.get("artifact_only", 0))
     m4.metric("Unguarded",    summary.get("unguarded", 0))
     m5.metric("MCP Servers",  summary.get("mcp_servers", 0))
     m6.metric("High",         summary.get("high_findings", 0))
     m7.metric("Medium",       summary.get("medium_findings", 0))
+    
+    score = summary.get("posture_maturity_score", 0)
+    m8.metric("Maturity", f"{score:.0f}%")
 
+    st.divider()
+
+    # ── Education Section ─────────────────────────────────────────────────────
+    with st.expander("🎓 **Research Brief: Understanding Passive Monitoring & Posture Maturity**", expanded=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("##### Defense Layers")
+            st.markdown("""
+- **Layer 1: Active Enforcement (Hooks)**  
+  Interceptor scripts are registered in agent settings. Every tool call is halted until the Guard model returns `ALLOW`.  
+  *Agents: Claude Code, Gemini CLI.*
+
+- **Layer 2: Passive Monitoring (Digital Exhaust Audit)**  
+  The agent is detected via version-controlled artifacts (`task.md`) or active "Brain Sessions" in your home directory (`~/.gemini/antigravity/brain/`). The Guard audits this "Digital Exhaust" to map agent intent to project workspaces.  
+  *Agents: Antigravity, VS Code AI.*
+""")
+        with c2:
+            st.markdown("##### Posture Maturity Score")
+            st.markdown("""
+The **Maturity Score** is a security research heuristic used to grade AI adoption safety:
+- **100%**: Full hook interception across all agents.
+- **50%**: Passive observation (Artifacts) only — risk of "Shadow Actions".
+- **0%**: No guard presence; unmonitored tool surface.
+
+**The "Missing Link":** To move IDE agents from Layer 2 to Layer 1, use the `shell_guard` wrapper or MCP shim.
+""")
+    
     st.divider()
 
     # ── Findings ──────────────────────────────────────────────────────────────
@@ -698,7 +736,7 @@ def _render_shadow_ai(audit_path: str) -> None:
     st.markdown(f"#### Coverage Map ({len(coverage)} repo/agent pairs)")
 
     if coverage:
-        _STATUS_ORD = {"UNGUARDED": 0, "SHADOW_HOOK": 1, "COVERED": 2}
+        _STATUS_ORD = {"UNGUARDED": 0, "ARTIFACT_ONLY": 1, "SHADOW_HOOK": 2, "COVERED": 3}
         sorted_cov = sorted(
             coverage,
             key=lambda g: (
@@ -723,6 +761,7 @@ def _render_shadow_ai(audit_path: str) -> None:
                 "Status":    row.get("status", ""),
                 "Agent":     agent_display,
                 "Repo":      repo_name,
+                "Artifacts": ", ".join(row.get("artifact_files", [])) or "—",
                 "Hook":      _hook_display_name(row.get("hook_command")),
                 "Inherited": "yes" if row.get("inherited") else "no",
             })
@@ -889,12 +928,18 @@ posture, independent of any live hook traffic.
 **Phase 2 — Analysis**
 - **Gap analyzer** assigns each (repo × agent) pair a coverage status:
   - `COVERED` — at least one hook in the resolved chain is a known guard
+  - `ARTIFACT_ONLY` — agent detected via artifacts; passive monitoring active (IDE agents)
   - `SHADOW_HOOK` — hooks exist but none are guard commands (unknown tool in the slot)
   - `UNGUARDED` — no hooks registered at all
-- **Trust analyzer** generates findings (HIGH / MEDIUM / LOW) for: remote MCP servers with
-  auto-trust, exposed API keys in env or `.env` files, overly broad folder-trust grants, orphaned
-  hook binaries, and unguarded active agents.
+
+**Phase 3 — Advanced Research**
+- **Posture Maturity Score** calculates a heuristic safety grade (0–100%) by weighting Active Enforcement vs. Passive Observation.
+- **External Brain Discovery** probes the machine's local agent memory (`~/.gemini/antigravity/brain/`) to identify agents that have been "cleaned" from the repository.
+- **Intent Drift Analysis** flags discrepancies between an agent's stated plan in its brain session and its actual actions on disk.
+- **Artifact Proliferation** maps the physical footprint of AI agents across the filesystem.
 """)
+
+
 
     st.markdown("---")
 
