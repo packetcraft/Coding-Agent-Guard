@@ -5,6 +5,19 @@ All notable changes to the **Coding Agent Guard** project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-18
+
+### Added
+- **Advanced analytics widgets**: Migrated "Events by Agent", "Block Rate Over Time", and "Inspection Method Distribution" from the workbench.
+- **Improved Monitoring**: Added Top 10 Blocked Inputs leaderboard and detailed Latency Distribution (P50/P95/P99) for better performance visibility.
+- **Session Intelligence**: Comprehensive Session Summary table with branch and commit metadata.
+- **Hook Coverage Matrix**: Real-time visibility of protected tool surfaces in the sidebar.
+- **Premium UX Styling**: Ported the Tokyo Night-inspired theme (Streamlit sub-component) from LLM Security Workbench.
+
+### Changed
+- **Dashboard Layout**: Optimized UI from 2-column to 3-column layout for higher information density.
+- **Visual Branding**: Integrated custom `.streamlit/config.toml` for cross-platform theme consistency.
+
 ## [1.0.0] - 2026-04-16
 
 ### Added

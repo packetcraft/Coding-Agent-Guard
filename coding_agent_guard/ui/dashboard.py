@@ -45,6 +45,23 @@ def _method_badge(method: str) -> str:
     return f'<span style="background:{colour};color:#1a1b26;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">{method}</span>'
 
 
+# ── Coverage matrix (static) ─────────────────────────────────────────────────
+
+_COVERAGE_ROWS = [
+    ("Bash",        "PreToolUse + PostToolUse", "Yes",     "Primary risk surface"),
+    ("Edit",        "PreToolUse",               "Yes",     "File modification"),
+    ("Write",       "PreToolUse",               "Yes",     "File creation / overwrite"),
+    ("WebFetch",    "PreToolUse",               "Yes",     "Network egress, indirect injection"),
+    ("Read",        "—",                        "No",      "Read-only, no state change"),
+    ("Glob",        "—",                        "No",      "Read-only filesystem search"),
+    ("Grep",        "—",                        "No",      "Read-only content search"),
+    ("WebSearch",   "—",                        "No",      "No side effects"),
+    ("Agent",       "—",                        "Partial", "Worktree isolation may break inheritance"),
+    ("mcp__*",      "PreToolUse",               "Yes",     "Full tool_input JSON sent to guard model"),
+    ("NotebookEdit","—",                        "No",      "Out of scope"),
+]
+
+
 # ── Data loading ──────────────────────────────────────────────────────────────
 
 def _load_audit(audit_path: str) -> tuple[pd.DataFrame, dict]:
@@ -252,10 +269,28 @@ def _render_audit_explorer(audit_path: str) -> None:
 def _render_dashboard(audit_path: str) -> None:
     df, sessions = _load_audit(audit_path)
 
+    # ── Coverage indicator (always visible even when no data) ─────────────────
+    with st.sidebar:
+        with st.expander("Hook coverage", expanded=False):
+            cov_df = pd.DataFrame(
+                _COVERAGE_ROWS,
+                columns=["Tool", "Hook type", "Covered", "Notes"],
+            )
+            st.dataframe(
+                cov_df,
+                width="stretch",
+                hide_index=True,
+                column_config={
+                    "Covered": st.column_config.TextColumn(width="small"),
+                },
+            )
+            st.caption("MCP tools and subagent worktrees are not covered in Phase 1.")
+
     if df.empty:
-        st.info("No audit records yet.")
+        st.info("No audit records yet. Start a session with hooks configured.")
         return
 
+    # ── Top-level KPIs ────────────────────────────────────────────────────────
     total       = len(df)
     blocks      = (df["verdict"] == "BLOCK").sum()
     errors      = (df["verdict"] == "ERROR").sum()
@@ -270,25 +305,113 @@ def _render_dashboard(audit_path: str) -> None:
     k3.metric("Agents",         f"{agent_cnt:,}")
     k4.metric("Blocks",         f"{blocks:,}")
     k5.metric("Block rate",     f"{block_rate:.1f}%")
-    k6.metric("Avg latency",    f"{avg_latency:.0f} ms" if not pd.isna(avg_latency) else "—")
+    k6.metric("Avg guard latency", f"{avg_latency:.0f} ms" if not pd.isna(avg_latency) else "—")
 
     st.divider()
 
-    col_left, col_right = st.columns(2)
+    col_left, col_mid, col_right = st.columns(3)
 
+    # ── Events by Agent ───────────────────────────────────────────────────────
     with col_left:
+        st.markdown("**Events by Agent**")
+        agent_counts = df["agent"].fillna("Claude").value_counts().reset_index()
+        agent_counts.columns = ["Agent", "Count"]
+        st.bar_chart(agent_counts.set_index("Agent"), width="stretch")
+
+    # ── Block rate over time (by day) ─────────────────────────────────────────
+    with col_mid:
+        st.markdown("**Block rate over time (daily)**")
+        daily = df.copy()
+        daily["date"] = daily["timestamp"].dt.date
+        by_day = daily.groupby("date").apply(
+            lambda g: pd.Series({
+                "total":  len(g),
+                "blocks": (g["verdict"] == "BLOCK").sum(),
+            })
+        ).reset_index()
+        by_day["block_rate_%"] = (by_day["blocks"] / by_day["total"] * 100).round(1)
+        st.line_chart(by_day.set_index("date")["block_rate_%"], width="stretch")
+
+    # ── Verdict distribution (keeping Plotly pie as it adds interactive value) 
+    with col_right:
         st.markdown("**Verdict distribution**")
         verdict_counts = df["verdict"].value_counts().reset_index()
         verdict_counts.columns = ["Verdict", "Count"]
         fig = px.pie(verdict_counts, values="Count", names="Verdict", 
                      color="Verdict", color_discrete_map=_VERDICT_COLOUR)
-        st.plotly_chart(fig, width="stretch")
+        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=220)
+        st.plotly_chart(fig, width='stretch')
 
-    with col_right:
+    col_left2, col_mid2, col_right2 = st.columns(3)
+
+    # ── Inspection Method distribution ───────────────────────────────────────
+    with col_left2:
+        st.markdown("**Inspection method distribution**")
+        if "inspection_method" in df.columns:
+            method_counts = df["inspection_method"].fillna("unknown").value_counts().reset_index()
+            method_counts.columns = ["Method", "Count"]
+            st.bar_chart(method_counts.set_index("Method"), width="stretch")
+        else:
+            st.caption("No inspection_method data yet.")
+
+    # ── Tool type breakdown ───────────────────────────────────────────────────
+    with col_mid2:
         st.markdown("**Events by tool type**")
-        tool_counts = df["tool_name"].value_counts().head(10).reset_index()
+        tool_counts = df["tool_name"].value_counts().reset_index()
         tool_counts.columns = ["Tool", "Count"]
         st.bar_chart(tool_counts.set_index("Tool"), width="stretch")
+
+    # ── Top blocked inputs ────────────────────────────────────────────────────
+    with col_right2:
+        st.markdown("**Top 10 blocked inputs**")
+        blocked_df = df[df["verdict"] == "BLOCK"].copy()
+        if blocked_df.empty:
+            st.success("No blocks recorded yet.")
+        else:
+            blocked_df["preview"] = blocked_df.apply(_tool_input_preview, axis=1)
+            top_blocked = blocked_df["preview"].value_counts().head(10).reset_index()
+            top_blocked.columns = ["Input preview", "Count"]
+            st.dataframe(top_blocked, width="stretch", hide_index=True)
+
+    # ── Hook latency histogram ────────────────────────────────────────────────
+    st.markdown("**Guard model latency distribution (ALLOW + BLOCK calls only)**")
+    latency_df = df[df["verdict"].isin(["ALLOW", "BLOCK"]) & df["latency_ms"].notna()]
+    if latency_df.empty:
+        st.caption("No latency data yet.")
+    else:
+        p50 = latency_df["latency_ms"].quantile(0.50)
+        p95 = latency_df["latency_ms"].quantile(0.95)
+        p99 = latency_df["latency_ms"].quantile(0.99)
+        lc1, lc2, lc3 = st.columns(3)
+        lc1.metric("P50 latency", f"{p50:.0f} ms")
+        lc2.metric("P95 latency", f"{p95:.0f} ms")
+        lc3.metric("P99 latency", f"{p99:.0f} ms")
+        st.bar_chart(
+            latency_df["latency_ms"].value_counts().sort_index(),
+            width="stretch",
+        )
+
+    # ── Session summary ───────────────────────────────────────────────────────
+    st.markdown("**Session summary**")
+    if sessions:
+        sess_rows = []
+        for sid, meta in sessions.items():
+            sess_df = df[df["session_id"] == sid]
+            sess_rows.append({
+                "Session":    _short_session(sid),
+                "Branch":     meta.get("git_branch") or "—",
+                "Commit":     meta.get("git_commit") or "—",
+                "Events":     len(sess_df),
+                "Blocks":     int((sess_df["verdict"] == "BLOCK").sum()),
+                "Errors":     int((sess_df["verdict"] == "ERROR").sum()),
+                "Started":    meta.get("timestamp", "—"),
+                "Guard model": meta.get("hook_model") or "—",
+            })
+        st.dataframe(
+            pd.DataFrame(sess_rows),
+            width="stretch",
+            hide_index=True,
+        )
 
 
 # ── Tab: Shadow AI ────────────────────────────────────────────────────────────
@@ -487,10 +610,10 @@ def _render_shadow_ai(audit_path: str) -> None:
                 f"All {len(sorted_cov)} repo/agent pairs are protected by Coding Agent Guard."
             )
             with st.expander("Show coverage details", expanded=False):
-                st.dataframe(df_cov, use_container_width=True, hide_index=True)
+                st.dataframe(df_cov, width='stretch', hide_index=True)
         else:
             # Something is unguarded — show the full table so problems are visible
-            st.dataframe(df_cov, use_container_width=True, hide_index=True)
+            st.dataframe(df_cov, width='stretch', hide_index=True)
     else:
         st.info("No coverage data.")
 
@@ -508,7 +631,7 @@ def _render_shadow_ai(audit_path: str) -> None:
                 "Method":  a.get("install_method", ""),
                 "Auth":    a.get("auth_type") or "—",
             })
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width='stretch', hide_index=True)
     else:
         st.info("No agents detected.")
 
@@ -527,7 +650,7 @@ def _render_shadow_ai(audit_path: str) -> None:
                 "Endpoint":  _mcp_endpoint_display(s),
                 "Tools":     s.get("tool_count") if s.get("tool_count") is not None else "—",
             })
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width='stretch', hide_index=True)
     else:
         st.info("No MCP servers configured.")
 
