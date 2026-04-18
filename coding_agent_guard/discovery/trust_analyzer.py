@@ -235,22 +235,26 @@ def _check_remote_mcp_trust(mcp_servers: list[McpServer], counter: _Counter) -> 
 
 # ── Unguarded repo findings ───────────────────────────────────────────────────
 
-def _check_unguarded_repos(gap_results: list, counter: _Counter) -> list[Finding]:
+def _check_unguarded_repos(gap_results: list, agents_found: list, counter: _Counter) -> list[Finding]:
     """Import GapResult type inline to avoid circular import at module level."""
     findings: list[Finding] = []
-    for g in gap_results:
         if g.status == "UNGUARDED":
+            # Heuristic: If it's Antigravity but no app is installed globally, 
+            # and it might just be artifact traces, downgrade or clarify.
+            is_trace = g.agent == "Antigravity" and not any(a.name == "Antigravity" for a in agents_found)
+            
             findings.append(Finding(
                 id=counter.next(),
                 category="UNGUARDED_AGENT",
-                severity="MEDIUM",
+                severity="MEDIUM" if not is_trace else "LOW",
                 agent=g.agent,
                 source=g.repo_path,
                 detail=(
                     f"{g.agent} agent active but no guard hook registered in '{g.repo_path}'. "
                     "Tool calls in this repo bypass Coding Agent Guard entirely."
+                    + (" Note: Antigravity IDE app not found; this may be a residual trace." if is_trace else "")
                 ),
-                remediation=f'Run: python install_hooks.py "{g.repo_path}"',
+                remediation=f'Run: python install_hooks.py "{g.repo_path}"' if not is_trace else "Delete .agents/ dir if unused, or install hooks.",
             ))
 
         elif g.status == "SHADOW_HOOK":
@@ -313,6 +317,7 @@ def _check_unguarded_repos(gap_results: list, counter: _Counter) -> list[Finding
 
 def analyze(
     scan_root: str,
+    agents_found: list,
     mcp_servers: list[McpServer],
     gap_results: list,
     finding_start: int = 1,
@@ -325,5 +330,5 @@ def analyze(
     findings.extend(_check_api_keys_env(counter))
     findings.extend(_check_api_keys_files(scan_root, counter))
     findings.extend(_check_remote_mcp_trust(mcp_servers, counter))
-    findings.extend(_check_unguarded_repos(gap_results, counter))
+    findings.extend(_check_unguarded_repos(gap_results, agents_found, counter))
     return findings

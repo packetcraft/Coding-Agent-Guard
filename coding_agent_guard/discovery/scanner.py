@@ -49,7 +49,7 @@ def run_scan(scan_root: str | None = None) -> ScanResult:
     repo_configs = crawl(root)
     gap_results = analyze(repo_configs)
     mcp_servers = mcp_inventory(root)
-    findings = trust_analyze(root, mcp_servers, gap_results)
+    findings = trust_analyze(root, agents, mcp_servers, gap_results)
 
     return ScanResult(
         scan_id=scan_id,

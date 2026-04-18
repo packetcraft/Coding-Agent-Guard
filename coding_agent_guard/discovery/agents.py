@@ -219,8 +219,7 @@ def detect_agents() -> list[AgentInfo]:
     ag_path = (
         shutil.which("antigravity") or 
         _app_installed_windows("Antigravity") or 
-        _app_installed_macos("Antigravity") or 
-        _home_dir_exists(".gemini/antigravity")
+        _app_installed_macos("Antigravity")
     )
     if ag_path:
         found.append(AgentInfo(
@@ -230,6 +229,17 @@ def detect_agents() -> list[AgentInfo]:
             install_method="app",
             auth_type="Gemini / Google Auth",
         ))
+    else:
+        # Check for history only - do not flag as "active app" but still report for inventory
+        brain_path = _home_dir_exists(".gemini/antigravity")
+        if brain_path:
+            found.append(AgentInfo(
+                name="Antigravity (History)",
+                version=None,
+                install_path=brain_path,
+                install_method="session_logs",
+                auth_type=None,
+            ))
 
     # ── Claude Code (npm global) ──────────────────────────────────────────────
     claude_npm = _npm_global_version("@anthropic-ai/claude-code")
