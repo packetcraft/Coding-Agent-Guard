@@ -393,11 +393,9 @@ def _render_dashboard(audit_path: str) -> None:
         st.markdown("**Block rate over time (daily)**")
         daily = df.copy()
         daily["date"] = daily["timestamp"].dt.date
-        by_day = daily.groupby("date").apply(
-            lambda g: pd.Series({
-                "total":  len(g),
-                "blocks": (g["verdict"] == "BLOCK").sum(),
-            })
+        by_day = daily.groupby("date").agg(
+            total=("verdict", "count"),
+            blocks=("verdict", lambda x: (x == "BLOCK").sum()),
         ).reset_index()
         by_day["block_rate_%"] = (by_day["blocks"] / by_day["total"] * 100).round(1)
         st.line_chart(by_day.set_index("date")["block_rate_%"], width="stretch")
@@ -410,7 +408,7 @@ def _render_dashboard(audit_path: str) -> None:
         fig = px.pie(verdict_counts, values="Count", names="Verdict", 
                      color="Verdict", color_discrete_map=_VERDICT_COLOUR)
         fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=220)
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     col_left2, col_mid2, col_right2 = st.columns(3)
 
