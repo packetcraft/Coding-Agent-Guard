@@ -268,6 +268,63 @@ def _render_audit_explorer(audit_path: str) -> None:
 
 # ── Tab: Dashboard ────────────────────────────────────────────────────────────
 
+def _generate_dashboard_markdown(df: pd.DataFrame, sessions: dict) -> str:
+    """Generate a Markdown report summarizing the dashboard KPIs and analytics."""
+    total       = len(df)
+    blocks      = (df["verdict"] == "BLOCK").sum()
+    errors      = (df["verdict"] == "ERROR").sum()
+    block_rate  = blocks / total * 100 if total else 0
+    session_cnt = df["session_id"].nunique()
+    agent_cnt   = df["agent"].nunique() if "agent" in df.columns else 1
+    avg_latency = df.loc[df["verdict"].isin(["ALLOW", "BLOCK"]), "latency_ms"].mean()
+
+    lines = []
+    lines.append("# Coding Agent Guard — Security Analytics Report")
+    lines.append(f"**Report Generated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  ")
+    lines.append("")
+    
+    lines.append("## Executive Summary (All-Time)")
+    lines.append(f"- **Total Hook Events:** {total:,}")
+    lines.append(f"- **Active Sessions:** {session_cnt:,}")
+    lines.append(f"- **Agents Monitored:** {agent_cnt:,}")
+    lines.append(f"- **Blocked Actions:** {blocks:,} ({block_rate:.1f}%)")
+    lines.append(f"- **Avg Guard Latency:** {avg_latency:.0f} ms" if not pd.isna(avg_latency) else "- **Avg Guard Latency:** —")
+    lines.append("")
+
+    lines.append("## Events by Agent")
+    agent_counts = df["agent"].fillna("Claude").value_counts()
+    for agent, count in agent_counts.items():
+        lines.append(f"- **{agent}:** {count:,}")
+    lines.append("")
+
+    lines.append("## Top 10 Blocked Inputs")
+    blocked_df = df[df["verdict"] == "BLOCK"].copy()
+    if blocked_df.empty:
+        lines.append("No blocks recorded.")
+    else:
+        blocked_df["preview"] = blocked_df.apply(_tool_input_preview, axis=1)
+        top_blocked = blocked_df["preview"].value_counts().head(10)
+        lines.append("| Count | Input Preview |")
+        lines.append("| :--- | :--- |")
+        for preview, count in top_blocked.items():
+            lines.append(f"| {count} | `{preview}` |")
+    lines.append("")
+
+    lines.append("## Session History")
+    if sessions:
+        lines.append("| Session | Branch | Commit | Events | Blocks | Started |")
+        lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
+        for sid, meta in sessions.items():
+            sess_df = df[df["session_id"] == sid]
+            short_sid = sid[:8]
+            branch = meta.get("git_branch") or "—"
+            commit = meta.get("git_commit") or "—"
+            started = meta.get("timestamp", "—")
+            lines.append(f"| {short_sid} | {branch} | {commit} | {len(sess_df)} | {int((sess_df['verdict'] == 'BLOCK').sum())} | {started} |")
+    
+    return "\n".join(lines)
+
+
 def _render_dashboard(audit_path: str) -> None:
     df, sessions = _load_audit(audit_path)
 
@@ -291,6 +348,17 @@ def _render_dashboard(audit_path: str) -> None:
     if df.empty:
         st.info("No audit records yet. Start a session with hooks configured.")
         return
+
+    # ── Export ────────────────────────────────────────────────────────────────
+    col_t1, col_t2 = st.columns([10, 2])
+    col_t1.markdown("### 📊 Security Analytics")
+    report_md = _generate_dashboard_markdown(df, sessions)
+    col_t2.download_button(
+        label="📥 Export Report (MD)",
+        data=report_md,
+        file_name=f"coding_agent_guard_analytics_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+        mime="text/markdown",
+    )
 
     # ── Top-level KPIs ────────────────────────────────────────────────────────
     total       = len(df)
@@ -527,16 +595,65 @@ def _render_shadow_ai(audit_path: str) -> None:
         )
         return
 
+    from coding_agent_guard.discovery.scanner import run_scan
+    from coding_agent_guard.discovery.report import as_markdown
+    # We need a ScanResult object to use as_markdown, but 'scan' is a dict from JSONL.
+    # Re-parsing it fully is complex, so we'll just check if we can generate it from the dict.
+    # Actually, as_markdown is simple enough that I should probably make it handle both or
+    # just create a simple helper in dashboard.py if needed.
+    # Let's see if I can re-run scan root if needed or just use a dict-based generator.
+    
     summary = scan.get("summary", {})
     ts = _fmt_timestamp(scan.get("timestamp", "—"))
 
-    st.caption(
+    # ── Export ────────────────────────────────────────────────────────────────
+    col_t1, col_t2 = st.columns([10, 2])
+    col_t1.caption(
         f"Last scan: **{ts}** \u2022 Root: `{scan.get('scan_root', '—')}` \u2022 "
         f"Scan ID: `{scan.get('scan_id', '—')}`"
     )
+    
+    # Simple markdown generator for the scan dict
+    def _scan_dict_to_markdown(s: dict) -> str:
+        lines = []
+        lines.append(f"# Shadow AI Discovery Report — {s.get('scan_id', '—')}")
+        lines.append(f"**Scan Root:** `{s.get('scan_root', '—')}`  ")
+        lines.append(f"**Timestamp:** {s.get('timestamp', '—')}  ")
+        lines.append("")
+        
+        summ = s.get("summary", {})
+        lines.append("## Executive Summary")
+        lines.append(f"- **IDEs Detected:** {summ.get('ides_found', 0)}")
+        lines.append(f"- **CLI Agents Detected:** {summ.get('agents_found', 0)}")
+        lines.append(f"- **Repo/Agent Pairs:** {summ.get('repo_agent_pairs', 0)}")
+        lines.append(f"- **Covered:** {summ.get('covered', 0)}")
+        lines.append(f"- **Unguarded:** {summ.get('unguarded', 0)}")
+        lines.append("")
+
+        lines.append("## Findings")
+        findings = s.get("findings", [])
+        if findings:
+            for f in findings:
+                lines.append(f"### {f.get('severity')}: {f.get('category')} ({f.get('id')})")
+                lines.append(f"- {f.get('detail')}")
+                lines.append(f"- **Fix:** {f.get('remediation')}")
+                lines.append("")
+        else:
+            lines.append("No findings.")
+            
+        return "\n".join(lines)
+
+    shadow_report_md = _scan_dict_to_markdown(scan)
+    col_t2.download_button(
+        label="📥 Export Report (MD)",
+        data=shadow_report_md,
+        file_name=f"shadow_ai_report_{scan.get('scan_id', 'scan')}.md",
+        mime="text/markdown",
+    )
 
     # ── Metric row ────────────────────────────────────────────────────────────
-    m1, m2, m3, m4, m5, m6, m7 = st.columns(7)
+    m0, m1, m2, m3, m4, m5, m6, m7 = st.columns(8)
+    m0.metric("IDEs",         summary.get("ides_found", 0))
     m1.metric("Agents",       summary.get("agents_found", 0))
     m2.metric("Pairs",        summary.get("repo_agent_pairs", 0))   # repo × agent
     m3.metric("Covered",      summary.get("covered", 0))
@@ -596,9 +713,15 @@ def _render_shadow_ai(audit_path: str) -> None:
         for row in sorted_cov:
             repo_path = row.get("repo_path", "")
             repo_name = Path(repo_path).name or repo_path
+            agent = row.get("agent", "")
+            
+            # Emojis for consistency
+            is_ide_agent = any(x in agent.lower() for x in ["zed", "antigravity", "cursor", "windsurf"])
+            agent_display = f"🖥️ {agent}" if is_ide_agent else f"🤖 {agent}"
+
             rows.append({
                 "Status":    row.get("status", ""),
-                "Agent":     row.get("agent", ""),
+                "Agent":     agent_display,
                 "Repo":      repo_name,
                 "Hook":      _hook_display_name(row.get("hook_command")),
                 "Inherited": "yes" if row.get("inherited") else "no",
@@ -625,15 +748,36 @@ def _render_shadow_ai(audit_path: str) -> None:
     agents = scan.get("agents", [])
     st.markdown(f"#### Agent Inventory ({len(agents)})")
     if agents:
-        rows = []
+        ide_rows = []
+        agent_rows = []
+
         for a in agents:
-            rows.append({
-                "Name":    a.get("name", ""),
+            name = a.get("name", "")
+            method = a.get("install_method", "")
+            
+            # Categorization logic
+            is_ide = any(x in name.lower() for x in ["vscode", "vs code", "zed", "antigravity", "cursor", "windsurf"])
+            
+            row = {
+                "Name":    f"🖥️ {name}" if is_ide else f"🤖 {name}",
                 "Version": a.get("version") or "—",
-                "Method":  a.get("install_method", ""),
+                "Type":    "IDE / Workspace" if is_ide else ("Extension" if method == "vscode_extension" else "CLI Agent"),
+                "Method":  method,
                 "Auth":    a.get("auth_type") or "—",
-            })
-        st.dataframe(rows, width='stretch', hide_index=True)
+            }
+
+            if is_ide:
+                ide_rows.append(row)
+            else:
+                agent_rows.append(row)
+
+        if ide_rows:
+            st.markdown("**AI-Powered IDEs & Workspaces**")
+            st.dataframe(pd.DataFrame(ide_rows), width='stretch', hide_index=True)
+        
+        if agent_rows:
+            st.markdown("**Autonomous Agents & Extensions**")
+            st.dataframe(pd.DataFrame(agent_rows), width='stretch', hide_index=True)
     else:
         st.info("No agents detected.")
 

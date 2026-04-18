@@ -111,8 +111,15 @@ def _global_gemini_settings_paths() -> list[Path]:
 
 def _is_repo(path: Path) -> bool:
     """Heuristic: a directory is a 'repo' if it contains .git, or at minimum a
-    recognised agent config dir."""
-    return (path / ".git").exists() or (path / ".claude").exists() or (path / ".gemini").exists()
+    recognised agent config dir or instructions file."""
+    return (
+        (path / ".git").exists() or 
+        (path / ".claude").exists() or 
+        (path / ".gemini").exists() or
+        (path / ".zed").exists() or
+        (path / ".agents").exists() or
+        (path / "AGENTS.md").exists()
+    )
 
 
 def _find_repos(scan_root: Path, max_depth: int = 4) -> list[Path]:
@@ -271,5 +278,34 @@ def crawl(scan_root: str) -> list[RepoConfig]:
                 )
                 configs.append(rc)
                 seen.add((str(repo), "Gemini"))
+
+        # ── Zed ───────────────────────────────────────────────────────────────
+        zed_cfg = repo / ".zed" / "settings.json"
+        if zed_cfg.exists():
+            configs.append(RepoConfig(
+                repo_path=str(repo),
+                agent="Zed",
+                config_path=str(zed_cfg),
+            ))
+            seen.add((str(repo), "Zed"))
+
+        # ── Antigravity / Shared Instructions ─────────────────────────────────
+        ag_dir = repo / ".agents"
+        if ag_dir.exists():
+            configs.append(RepoConfig(
+                repo_path=str(repo),
+                agent="Antigravity",
+                config_path=str(ag_dir),
+            ))
+            seen.add((str(repo), "Antigravity"))
+        
+        ag_file = repo / "AGENTS.md"
+        if ag_file.exists() and (str(repo), "Antigravity") not in seen:
+            configs.append(RepoConfig(
+                repo_path=str(repo),
+                agent="Antigravity/Shared",
+                config_path=str(ag_file),
+            ))
+            seen.add((str(repo), "Antigravity/Shared"))
 
     return configs

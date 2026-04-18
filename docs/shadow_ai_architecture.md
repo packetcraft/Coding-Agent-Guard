@@ -46,12 +46,15 @@ coding-agent-guard shadow-ai [--root PATH]
 
 ### Agent Detection (`discovery/agents.py`)
 
-`detect_agents()` probes 10 installation surfaces using a tiered strategy:
+`detect_agents()` probes 13 installation surfaces using a tiered strategy:
 
 | Agent | Probe Method |
 |---|---|
+| VS Code | `shutil.which("code")` + Windows registry/path lookup |
+| Zed | `shutil.which("zed")` + `%APPDATA%\Zed\` (Windows) / `~/.config/zed/` |
+| Antigravity | `shutil.which("antigravity")` + `~/.gemini/antigravity/` |
 | Claude Code | `npm list -g @anthropic-ai/claude-code` + PATH lookup |
-| Gemini CLI | `npm list -g @google/generative-ai` + PATH lookup |
+| Gemini CLI | `npm list -g @google/gemini-cli` + PATH lookup |
 | Aider | `pip show aider-chat` + PATH lookup |
 | GitHub Copilot | VS Code extension directory scan |
 | Continue.dev | VS Code extension + `~/.continue/` |
@@ -61,30 +64,30 @@ coding-agent-guard shadow-ai [--root PATH]
 | Windsurf / Codeium | `~/.windsurf/` / `~/.codeium/` |
 | Claude Desktop | Presence of `claude_desktop_config.json` |
 
-Each detected agent yields an `AgentInfo` record: name, version, install path, install method, and auth type.
-
 ### Config Crawler (`discovery/config_crawler.py`)
 
-`crawl(scan_root)` walks the filesystem looking for agent config files:
+`crawl(scan_root)` walks the filesystem looking for agent config files and instructions:
 - Claude Code: `.claude/settings.json`
 - Gemini CLI: `.gemini/settings.json`
+- Zed: `.zed/settings.json`
+- Antigravity: `.agents/` directory or `AGENTS.md` instruction files
 
 For each config file found, it parses:
 - All registered hooks (event, matcher, command)
 - MCP server count
 - Whether any hook command matches known guard patterns (`coding-agent-guard`, `agentic_guard`)
 
-**Hook Inheritance Resolution:** The crawler follows the same parent-directory walk that Claude Code and Gemini CLI use at runtime. A global config at `~/.claude/settings.json` is inherited by every repo that doesn't override it. The crawler materializes this inheritance chain so coverage analysis reflects what the agent actually loads, not just what's in the repo directory.
-
 ### MCP Inventory (`discovery/mcp_inventory.py`)
 
-`inventory(scan_root)` collects MCP server registrations from five sources in priority order:
+`inventory(scan_root)` collects MCP server registrations from seven sources in priority order:
 
-1. Claude Desktop (`claude_desktop_config.json`) — typically global, user-level trust
+1. Claude Desktop (`claude_desktop_config.json`)
 2. Claude Code global settings (`~/.claude/settings.json`)
 3. Gemini CLI global settings (`~/.gemini/settings.json`)
 4. Gemini extensions (`~/.gemini/extensions/*/gemini-extension.json`)
-5. Per-repo configs (`.claude/settings.json`, `.gemini/settings.json` under scan root)
+5. Zed global settings (`%APPDATA%\Zed\settings.json` or `~/.config/zed/settings.json`)
+6. Antigravity global settings (`~/.gemini/settings.json`)
+7. Per-repo configs (`.claude/settings.json`, `.gemini/settings.json`, `.zed/settings.json`, `.agents/settings.json`)
 
 Each `McpServer` record captures: name, transport type (`local` / `remote`), command or URL, trust flag, originating agent, source file path, and declared tool count.
 

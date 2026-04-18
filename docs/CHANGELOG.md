@@ -5,6 +5,24 @@ All notable changes to the **Coding Agent Guard** project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-04-18
+
+### Added
+- **Report Export**: Users can now export the **Security Analytics Dashboard** and **Shadow AI Discovery** results as well-formatted Markdown reports for auditing and compliance.
+- **Categorized Inventory**: The discovery UI now separates detected tools into **AI-Powered IDEs** and **Autonomous Agents** for better information hierarchy.
+
+## [1.1.1] - 2026-04-18
+
+### Added
+- **Expanded Agent Support**: The Shadow AI discovery engine now detects **VS Code**, **Zed**, and **Antigravity** IDEs.
+- **Improved Configuration Crawling**: 
+    - Support for **Zed** project-level settings (`.zed/settings.json`).
+    - Support for **Antigravity** project-level settings (`.agents/`).
+    - Detection for **Shared Instructions** via `AGENTS.md` files.
+- **Enhanced MCP Inventory**:
+    - Enumerate MCP servers configured in Zed (`context_servers`).
+    - Enumerate MCP servers in Antigravity/Gemini settings.
+
 ## [1.1.0] - 2026-04-18
 
 ### Added

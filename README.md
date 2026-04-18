@@ -92,8 +92,9 @@ Opens the Streamlit dashboard at **http://localhost:8501** with four tabs:
 - **📘 System Blueprint** — architecture overview, hook interception strategy, and enforcement modes
 - **📡 Live Feed** — auto-refreshing view of current tool calls and verdicts
 - **🔍 Forensics & Logs** — filterable history of all security events
-- **📊 Dashboard** — advanced analytics including block rate trends and latency stats
-- **🛡️ AI Posture Discovery** — posture scan: installed agents, hook coverage map, and trust findings
+- **📊 Dashboard** — analytics including block rate trends and latency stats
+- **🛡️ AI Posture & Discovery** — posture scan: IDE/Agent inventory, hook coverage map, trust findings, and Markdown exports
+- **🖥️ IDE Support** — specialized detection for VS Code, Zed, and Antigravity IDEs
 
 The UI features a premium **Tokyo Night-inspired dark theme** ported from the LLM Security Workbench for a unified professional experience.
 

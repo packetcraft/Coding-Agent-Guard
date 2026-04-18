@@ -120,7 +120,91 @@ def as_text(result: ScanResult) -> str:
     return "\n".join(lines)
 
 
+def as_markdown(result: ScanResult) -> str:
+    lines: list[str] = []
+    lines.append(f"# Shadow AI Discovery Report — {result.scan_id}")
+    lines.append(f"**Scan Root:** `{result.scan_root}`  ")
+    lines.append(f"**Timestamp:** {result.timestamp}  ")
+    lines.append("")
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    total = len(result.gap_results)
+    covered = sum(1 for g in result.gap_results if g.status == "COVERED")
+    unguarded = sum(1 for g in result.gap_results if g.status == "UNGUARDED")
+    ides_count = sum(1 for a in result.agents_found if any(x in a.name.lower() for x in ["vscode", "vs code", "zed", "antigravity", "cursor", "windsurf"]))
+    agents_count = len(result.agents_found) - ides_count
+
+    lines.append("## Executive Summary")
+    lines.append(f"- **IDEs Detected:** {ides_count}")
+    lines.append(f"- **CLI Agents Detected:** {agents_count}")
+    lines.append(f"- **Repo/Agent Pairs:** {total}")
+    lines.append(f"- **Covered:** {covered} ({(covered/total*100 if total else 0):.1f}%)")
+    lines.append(f"- **Unguarded:** {unguarded}")
+    lines.append(f"- **High Severity Findings:** {sum(1 for f in result.findings if f.severity == 'HIGH')}")
+    lines.append("")
+
+    # ── Findings ──────────────────────────────────────────────────────────────
+    lines.append("## Security Findings")
+    if result.findings:
+        sorted_findings = sorted(result.findings, key=lambda f: _SEV_ORDER.get(f.severity, 9))
+        for f in sorted_findings:
+            lines.append(f"### {f.severity}: {f.category} ({f.id})")
+            if f.agent:
+                lines.append(f"- **Agent:** {f.agent}")
+            lines.append(f"- **Source:** `{f.source}`")
+            lines.append(f"- **Detail:** {f.detail}")
+            lines.append(f"- **Remediation:** {f.remediation}")
+            lines.append("")
+    else:
+        lines.append("No security findings detected.")
+    lines.append("")
+
+    # ── Agent Inventory ───────────────────────────────────────────────────────
+    lines.append("## Agent Inventory")
+    if result.agents_found:
+        lines.append("| Name | Version | Method | Auth |")
+        lines.append("| :--- | :--- | :--- | :--- |")
+        for a in result.agents_found:
+            lines.append(f"| {a.name} | {a.version or '—'} | {a.install_method} | {a.auth_type or '—'} |")
+    else:
+        lines.append("No agents detected.")
+    lines.append("")
+
+    # ── Coverage Map ──────────────────────────────────────────────────────────
+    lines.append("## Hook Coverage Map")
+    if result.gap_results:
+        lines.append("| Status | Agent | Inherited | Repo Path |")
+        lines.append("| :--- | :--- | :--- | :--- |")
+        sorted_gaps = sorted(
+            result.gap_results,
+            key=lambda g: (_STATUS_ORDER.get(g.status, 9), g.agent, g.repo_path),
+        )
+        for g in sorted_gaps:
+            inh = "yes" if g.inherited else "no"
+            lines.append(f"| {g.status} | {g.agent} | {inh} | `{g.repo_path}` |")
+    else:
+        lines.append("No repo/agent pairs found.")
+    lines.append("")
+
+    # ── MCP Surface ───────────────────────────────────────────────────────────
+    lines.append("## MCP Surface")
+    if result.mcp_servers:
+        lines.append("| Name | Agent | Transport | Trust | Source |")
+        lines.append("| :--- | :--- | :--- | :--- | :--- |")
+        for s in result.mcp_servers:
+            trust = "YES" if s.trust else "no"
+            lines.append(f"| {s.name} | {s.agent} | {s.transport} | {trust} | `{s.source}` |")
+    else:
+        lines.append("No MCP servers configured.")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 def as_json(result: ScanResult) -> str:
+    ides_count = sum(1 for a in result.agents_found if any(x in a.name.lower() for x in ["vscode", "vs code", "zed", "antigravity", "cursor", "windsurf"]))
+    agents_count = len(result.agents_found) - ides_count
+
     data = {
         "schema_version": "v1",
         "event_type": "DISCOVERY_SCAN",
@@ -128,7 +212,8 @@ def as_json(result: ScanResult) -> str:
         "timestamp": result.timestamp,
         "scan_root": result.scan_root,
         "summary": {
-            "agents_found": len(result.agents_found),
+            "ides_found": ides_count,
+            "agents_found": agents_count,
             "repo_agent_pairs": len(result.gap_results),
             "covered": sum(1 for g in result.gap_results if g.status == "COVERED"),
             "shadow_hooks": sum(1 for g in result.gap_results if g.status == "SHADOW_HOOK"),

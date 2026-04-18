@@ -107,6 +107,24 @@ def _home_dir_exists(rel: str) -> str | None:
     return str(p) if p.exists() else None
 
 
+def _app_data_dir_exists(rel: str) -> str | None:
+    """Check %APPDATA% (Roaming) or %LOCALAPPDATA% for a directory."""
+    if sys.platform == "win32":
+        candidates = [
+            Path(os.environ.get("APPDATA", "")) / rel,
+            Path(os.environ.get("LOCALAPPDATA", "")) / rel,
+        ]
+        for c in candidates:
+            if c.exists():
+                return str(c)
+    else:
+        # Linux/macOS equivalents roughly
+        base = Path.home() / ".config" / rel
+        if base.exists():
+            return str(base)
+    return None
+
+
 # ── Auth type detection ───────────────────────────────────────────────────────
 
 def _claude_auth_type() -> str | None:
@@ -138,6 +156,10 @@ def _gemini_auth_type() -> str | None:
     adc = Path(base) / ".config" / "gcloud" / "application_default_credentials.json"
     if adc.exists():
         return "gcloud ADC"
+    # Antigravity often uses the same .gemini config surface
+    gemini_cfg = Path(base) / ".gemini" / "settings.json"
+    if gemini_cfg.exists():
+        return "Configured (.gemini)"
     return None
 
 
@@ -146,6 +168,40 @@ def _gemini_auth_type() -> str | None:
 def detect_agents() -> list[AgentInfo]:
     """Probe all known agent installation surfaces and return discovered agents."""
     found: list[AgentInfo] = []
+
+    # ── VS Code (Application) ─────────────────────────────────────────────────
+    vscode_path = shutil.which("code") or _app_installed_windows("Microsoft VS Code")
+    if vscode_path:
+        found.append(AgentInfo(
+            name="VS Code",
+            version=_path_version("code", "--version") if shutil.which("code") else None,
+            install_path=vscode_path,
+            install_method="app",
+            auth_type=None,
+        ))
+
+    # ── Zed (Application) ─────────────────────────────────────────────────────
+    zed_path = shutil.which("zed") or _app_installed_windows("Zed") or _app_data_dir_exists("Zed")
+    if zed_path:
+        found.append(AgentInfo(
+            name="Zed",
+            version=None,
+            install_path=zed_path,
+            install_method="app",
+            auth_type=None,
+        ))
+
+    # ── Antigravity (Application) ─────────────────────────────────────────────
+    # Antigravity is Google's agentic IDE
+    ag_path = shutil.which("antigravity") or _app_installed_windows("Antigravity") or _home_dir_exists(".gemini/antigravity")
+    if ag_path:
+        found.append(AgentInfo(
+            name="Antigravity",
+            version=None,
+            install_path=ag_path,
+            install_method="app",
+            auth_type="Gemini / Google Auth",
+        ))
 
     # ── Claude Code (npm global) ──────────────────────────────────────────────
     claude_npm = _npm_global_version("@anthropic-ai/claude-code")

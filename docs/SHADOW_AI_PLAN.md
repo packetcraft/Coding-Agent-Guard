@@ -35,6 +35,9 @@ Detect installed AI coding agents across all installation surfaces.
 
 | Agent | Detection Method |
 |---|---|
+| VS Code | App install, `shutil.which("code")` |
+| Zed | App install, `~/.config/zed/` |
+| Antigravity | App install, `~/.gemini/antigravity/` |
 | Claude Code | `npm list -g`, PATH (`claude`) |
 | Gemini CLI | `npm list -g` (`@google/gemini-cli`), PATH (`gemini`) |
 | GitHub Copilot | VS Code extension `github.copilot*` |
@@ -51,6 +54,7 @@ Output per agent: name, version, install path, auth type (OAuth / API key / none
 ### Tier 2 — Hook Surface
 For each (repo × agent) pair:
 - Does a hook config exist? (project-level or inherited from a parent-dir global)
+- Supports **Zed** (`.zed/settings.json`), **Antigravity** (`.agents/`), and **Shared Instructions** (`AGENTS.md`).
 - What hook events are registered? (`PreToolUse`, `PostToolUse`, `BeforeTool`, `AfterTool`)
 - What matchers does each hook cover? Gaps matter — `Bash` hooked but `WebFetch` not is a blind spot.
 - What command does each hook run? Is it our guard, another tool, or an unknown script?

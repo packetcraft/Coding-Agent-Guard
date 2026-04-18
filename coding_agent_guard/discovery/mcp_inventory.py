@@ -59,9 +59,11 @@ def _classify_mcp_entry(name: str, entry: dict, agent: str, source: str) -> McpS
 
 
 def _parse_mcp_servers(config: dict, agent: str, source: str) -> list[McpServer]:
-    """Parse the mcpServers section of any agent config dict."""
+    """Parse the mcpServers or context_servers section of any agent config dict."""
     servers: list[McpServer] = []
-    mcp_section = config.get("mcpServers", {})
+    # Claude/Gemini/Antigravity use mcpServers
+    # Zed uses context_servers
+    mcp_section = config.get("mcpServers") or config.get("context_servers")
     if not isinstance(mcp_section, dict):
         return servers
     for name, entry in mcp_section.items():
@@ -71,6 +73,24 @@ def _parse_mcp_servers(config: dict, agent: str, source: str) -> list[McpServer]
 
 
 # ── Per-source parsers ────────────────────────────────────────────────────────
+
+def _zed_global_servers() -> list[McpServer]:
+    if sys.platform == "win32":
+        cfg_path = Path(os.environ.get("APPDATA", "")) / "Zed" / "settings.json"
+    else:
+        cfg_path = Path.home() / ".config" / "zed" / "settings.json"
+
+    if not cfg_path.exists():
+        return []
+    return _parse_mcp_servers(_load_json(cfg_path), "Zed", str(cfg_path))
+
+
+def _antigravity_global_servers() -> list[McpServer]:
+    path = _home() / ".gemini" / "settings.json"
+    if not path.exists():
+        return []
+    return _parse_mcp_servers(_load_json(path), "Antigravity", str(path))
+
 
 def _claude_desktop_servers() -> list[McpServer]:
     if sys.platform == "win32":
@@ -125,19 +145,28 @@ def _gemini_extension_servers() -> list[McpServer]:
 
 
 def _repo_level_servers(scan_root: str) -> list[McpServer]:
-    """Walk scan_root for per-repo .claude/settings.json and .gemini/settings.json MCP entries."""
+    """Walk scan_root for per-repo agent settings files and extract MCP entries."""
     servers: list[McpServer] = []
     root = Path(scan_root).expanduser().resolve()
 
     def _walk(p: Path, depth: int) -> None:
         if depth > 4:
             return
-        # Claude per-repo
-        for cfg_rel, agent in [(".claude/settings.json", "Claude Code"),
-                                 (".gemini/settings.json", "Gemini CLI")]:
+        
+        # Mapping of relative config paths to Agent names
+        # Antigravity/Gemini shared often
+        configs = [
+            (".claude/settings.json", "Claude Code"),
+            (".gemini/settings.json", "Gemini CLI"),
+            (".zed/settings.json",    "Zed"),
+            (".agents/settings.json", "Antigravity"),
+        ]
+        
+        for cfg_rel, agent in configs:
             cfg = p / cfg_rel
             if cfg.exists():
                 servers.extend(_parse_mcp_servers(_load_json(cfg), agent, str(cfg)))
+        
         # Don't descend into hidden dirs
         try:
             for child in sorted(p.iterdir()):
@@ -159,6 +188,8 @@ def inventory(scan_root: str) -> list[McpServer]:
     servers.extend(_claude_global_servers())
     servers.extend(_gemini_global_servers())
     servers.extend(_gemini_extension_servers())
+    servers.extend(_zed_global_servers())
+    servers.extend(_antigravity_global_servers())
     servers.extend(_repo_level_servers(scan_root))
 
     # Deduplicate by (name, source) — extensions can re-export the same server
