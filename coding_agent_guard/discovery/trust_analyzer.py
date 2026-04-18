@@ -238,6 +238,7 @@ def _check_remote_mcp_trust(mcp_servers: list[McpServer], counter: _Counter) -> 
 def _check_unguarded_repos(gap_results: list, agents_found: list, counter: _Counter) -> list[Finding]:
     """Import GapResult type inline to avoid circular import at module level."""
     findings: list[Finding] = []
+    for g in gap_results:
         if g.status == "UNGUARDED":
             # Heuristic: If it's Antigravity but no app is installed globally, 
             # and it might just be artifact traces, downgrade or clarify.
