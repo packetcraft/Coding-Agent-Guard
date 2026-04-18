@@ -98,6 +98,20 @@ def _app_installed_windows(name: str) -> str | None:
     return None
 
 
+def _app_installed_macos(bundle_name: str) -> str | None:
+    """Check standard macOS /Applications for a .app bundle."""
+    if sys.platform != "darwin":
+        return None
+    candidates = [
+        Path("/Applications") / f"{bundle_name}.app",
+        Path.home() / "Applications" / f"{bundle_name}.app",
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return None
+
+
 def _home_dir_exists(rel: str) -> str | None:
     if sys.platform == "win32":
         base = os.environ.get("USERPROFILE", "")
@@ -170,7 +184,11 @@ def detect_agents() -> list[AgentInfo]:
     found: list[AgentInfo] = []
 
     # ── VS Code (Application) ─────────────────────────────────────────────────
-    vscode_path = shutil.which("code") or _app_installed_windows("Microsoft VS Code")
+    vscode_path = (
+        shutil.which("code") or 
+        _app_installed_windows("Microsoft VS Code") or 
+        _app_installed_macos("Visual Studio Code")
+    )
     if vscode_path:
         found.append(AgentInfo(
             name="VS Code",
@@ -181,7 +199,12 @@ def detect_agents() -> list[AgentInfo]:
         ))
 
     # ── Zed (Application) ─────────────────────────────────────────────────────
-    zed_path = shutil.which("zed") or _app_installed_windows("Zed") or _app_data_dir_exists("Zed")
+    zed_path = (
+        shutil.which("zed") or 
+        _app_installed_windows("Zed") or 
+        _app_installed_macos("Zed") or 
+        _app_data_dir_exists("Zed")
+    )
     if zed_path:
         found.append(AgentInfo(
             name="Zed",
@@ -193,7 +216,12 @@ def detect_agents() -> list[AgentInfo]:
 
     # ── Antigravity (Application) ─────────────────────────────────────────────
     # Antigravity is Google's agentic IDE
-    ag_path = shutil.which("antigravity") or _app_installed_windows("Antigravity") or _home_dir_exists(".gemini/antigravity")
+    ag_path = (
+        shutil.which("antigravity") or 
+        _app_installed_windows("Antigravity") or 
+        _app_installed_macos("Antigravity") or 
+        _home_dir_exists(".gemini/antigravity")
+    )
     if ag_path:
         found.append(AgentInfo(
             name="Antigravity",
@@ -287,8 +315,10 @@ def detect_agents() -> list[AgentInfo]:
 
     # ── Cursor (app / home dir) ───────────────────────────────────────────────
     cursor_path = (
-        _app_installed_windows("Cursor") if sys.platform == "win32" else None
-    ) or _home_dir_exists(".cursor")
+        (_app_installed_windows("Cursor") if sys.platform == "win32" else None) or 
+        _app_installed_macos("Cursor") or 
+        _home_dir_exists(".cursor")
+    )
     if cursor_path:
         found.append(AgentInfo(
             name="Cursor",

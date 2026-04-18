@@ -172,66 +172,70 @@ def _probe_antigravity_brain() -> list[RepoConfig]:
     Search the local Antigravity brain directory for session artifacts
     that contain workspace file paths.
     """
-    brain_root = _home() / ".gemini" / "antigravity" / "brain"
-    if not brain_root.exists():
-        return []
+    roots = [
+        _home() / ".gemini" / "antigravity" / "brain",
+    ]
+    if sys.platform == "darwin":
+        roots.append(_home() / "Library" / "Application Support" / "Antigravity" / "brain")
 
     configs: list[RepoConfig] = []
     # Key = normalized repo path, Value = RepoConfig
     discovered: dict[str, RepoConfig] = {}
 
-    try:
-        for sess_dir in brain_root.iterdir():
-            if not sess_dir.is_dir():
-                continue
-            
-            # Look for recent artifacts
-            # Note: implementation_plan.md and walkthrough.md usually contain URIs
-            for art_name in ["implementation_plan.md", "walkthrough.md"]:
-                art_file = sess_dir / art_name
-                if not art_file.exists():
+    for brain_root in roots:
+        if not brain_root.exists():
+            continue
+
+        try:
+            for sess_dir in brain_root.iterdir():
+                if not sess_dir.is_dir():
                     continue
                 
-                try:
-                    content = art_file.read_text(encoding="utf-8", errors="replace")
-                    matches = _URI_PATTERN.findall(content)
-                    for path in matches:
-                        # Normalize path: convert to absolute
-                        norm_path = path.replace("\\", "/").rstrip("/")
-                        
-                        # Heuristic to find the repo root: 
-                        # Look for common markers if we were to walk up, 
-                        # but here we just try to find a parent that is a repo.
-                        p = Path(norm_path)
-                        repo_root = None
-                        
-                        # Walk up from the file path to find the repo root
-                        current = p if p.is_dir() else p.parent
-                        for _ in range(5):
-                            if (current / ".git").exists() or (current / ".claude").exists() or (current / ".gemini").exists():
-                                repo_root = current
-                                break
-                            if current.parent == current:
-                                break
-                            current = current.parent
-                        
-                        if not repo_root:
-                            continue
+                # Look for recent artifacts
+                # Note: implementation_plan.md and walkthrough.md usually contain URIs
+                for art_name in ["implementation_plan.md", "walkthrough.md"]:
+                    art_file = sess_dir / art_name
+                    if not art_file.exists():
+                        continue
+                    
+                    try:
+                        content = art_file.read_text(encoding="utf-8", errors="replace")
+                        matches = _URI_PATTERN.findall(content)
+                        for path in matches:
+                            # Normalize path: convert to absolute
+                            norm_path = path.replace("\\", "/").rstrip("/")
+                            
+                            p = Path(norm_path)
+                            repo_root = None
+                            
+                            # Walk up to find repo root
+                            current = p if p.is_dir() else p.parent
+                            for _ in range(5):
+                                if (current / ".git").exists() or (current / ".claude").exists() or (current / ".gemini").exists():
+                                    repo_root = current
+                                    break
+                                if current.parent == current:
+                                    break
+                                current = current.parent
+                            
+                            if not repo_root:
+                                continue
 
-                        repo_str = str(repo_root.resolve())
-                        if repo_str not in discovered:
-                            discovered[repo_str] = RepoConfig(
-                                repo_path=repo_str,
-                                agent="Antigravity (Brain Session)",
-                                config_path=str(art_file),
-                                external_brain_session=sess_dir.name
-                            )
-                except Exception:
-                    continue
-    except Exception:
-        pass
+                            repo_str = str(repo_root.resolve())
+                            if repo_str not in discovered:
+                                discovered[repo_str] = RepoConfig(
+                                    repo_path=repo_str,
+                                    agent="Antigravity (Brain Session)",
+                                    config_path=str(art_file),
+                                    external_brain_session=sess_dir.name
+                                )
+                    except Exception:
+                        continue
+        except Exception:
+            pass
 
     return list(discovered.values())
+
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
