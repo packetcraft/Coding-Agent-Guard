@@ -5,6 +5,49 @@ All notable changes to the **Coding Agent Guard** project will be documented in 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-23
+
+### Added
+
+**Guard Enhancements & Posture Patrol — Active Defense Update**
+
+#### What Was Implemented
+
+| # | Feature | Files Changed |
+|---|---------|--------------|
+| 1 | **Daily Patrol** (`guard patrol`) | `patrol.py` — `PatrolEngine`, background loop, drift detection |
+| 2 | **Static Analysis Guard** (`guard scan`) | `static_scanner.py` — 24 rules (Trojan, Obfuscation, Secrets, Shell Exec) |
+| 3 | **Visual Health Dashboard** | `dashboard.py` — Maturity Gauge, Guardy Mascot, Patrol Status banner |
+| 4 | **Agent & Skill Attribution** | `guard.py`, `dashboard.py` — `skill_id` tracking for MCP tools |
+| 5 | **Action Guard Fast-Path** | `guard.py` — Static scan integration before LLM classification |
+
+#### Test Plan
+
+**1. Daily Patrol (`guard patrol`)**
+```bash
+coding-agent-guard patrol run
+coding-agent-guard patrol status
+```
+Verify: Patrol runs discovery, compares with baseline, and logs results to `audit/patrol_history.jsonl`.
+
+**2. Static Analysis Guard (`guard scan`)**
+```bash
+coding-agent-guard scan . --recursive
+```
+Verify: Detects malicious patterns (e.g. `rm -rf /`, AWS keys) with 24 specialized rules.
+
+**3. Visual Health Checkup**
+Navigate to **AI Posture & Discovery** tab. Verify:
+- Plotly Maturity Gauge renders correctly.
+- Guardy Mascot (🚨, ⚠️, ✅) updates based on score.
+- Active Patrol status banner appears at the top.
+
+**4. Skill Attribution**
+Run an agent tool call (e.g. via an MCP server). Verify:
+- Live Feed and Audit Explorer show the `skill_id` (e.g. server name).
+
+---
+
 ## [1.2.0] - 2026-04-18
 
 ### Added

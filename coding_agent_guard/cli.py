@@ -11,6 +11,14 @@ def main() -> None:
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         from coding_agent_guard.discovery.scanner import cli
         cli()
+    elif len(sys.argv) > 1 and sys.argv[1] == "patrol":
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
+        from coding_agent_guard.core.patrol import cli as patrol_cli
+        patrol_cli()
+    elif len(sys.argv) > 1 and sys.argv[1] == "scan":
+        sys.argv = [sys.argv[0]] + sys.argv[2:]
+        from coding_agent_guard.core.static_scanner import cli as scan_cli
+        scan_cli()
     else:
         from coding_agent_guard.core.guard import main as guard_main
         guard_main()

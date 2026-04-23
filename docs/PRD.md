@@ -42,8 +42,11 @@ Existing security measures are often "Passive" (logs only). **Coding Agent Guard
 - **CI/CD Pipeline Agent Detection**: Scans `.github/workflows/*.yml` for AI agent action references; generates `CICD_AGENT_UNGUARDED` findings for unguarded pipelines.
 - **Posture Drift (`--diff`)**: Compares scans over time to surface new agents, lost protections, new MCP servers, and score delta.
 - **Remediation Auto-fix (`--fix`)**: Interactively writes guard hooks into unguarded Claude repos with confirmation before any file is modified.
-- **Posture Maturity Scoring**: Heuristic 0–100% grade; historical trend chart in dashboard.
+- **Posture Maturity Scoring**: Heuristic 0–100% grade; historical trend chart in dashboard with visual **Maturity Gauge** and **Guardy Mascot**.
 - **Full-page Report Export**: Dashboard exports every section of the AI Posture & Discovery tab as a structured Markdown report.
+- **Daily Posture Patrol**: Automated background service for scheduled security audits and drift detection.
+- **Static Analysis Guard (Deep Scan)**: Integrated fast-path scanner with 24 rules for detecting Trojans, obfuscated code, and destructive shell commands in real-time.
+- **Agent & Skill Attribution**: Granular tracking of which specific agent and sub-skill (e.g. MCP server) initiated a tool call.
 
 ### Security Dashboard
 - **AI Posture & Discovery tab**: Agent inventory, coverage map (with `BROKEN_HOOK` highlighting), MCP surface with capability risk tiers, findings, posture score trend, and scan drift panel.
@@ -55,9 +58,8 @@ Existing security measures are often "Passive" (logs only). **Coding Agent Guard
 - **Universal Shell Observation**: Audit-only shell wrappers to capture commands from any agent process regardless of native hook support.
 - **Interactive Approval UI**: Pause execution for human review via a lightweight UI (Streamlit).
 - **Runtime Sandbox**: Automatically wrap shell commands in Docker/nsjail.
-- **Static Analysis Guard**: Intercept file writes to run `bandit` or `eslint-plugin-security`.
-- **MCP Tool Enumeration**: Live introspection of local MCP servers to enumerate exposed tool schemas.
 - **Supply Chain Guard**: Typosquatting and malicious package detection for `pip`/`npm` installs by agents.
+- **MCP Tool Enumeration**: Live introspection of local MCP servers to enumerate exposed tool schemas.
 
 ## 8. Technical Constraints
 - **Language**: Python 3.9+

@@ -11,51 +11,44 @@ import subprocess
 from pathlib import Path
 
 from coding_agent_guard.core.config import Config
-from coding_agent_guard.core.telemetry import utcnow, write_audit
+from coding_agent_guard.core.guard import GuardEngine
 
 def main():
     # If no arguments, just start an interactive shell
     shell_to_run = os.environ.get("COMSPEC", "cmd.exe") if sys.platform == "win32" else os.environ.get("SHELL", "/bin/bash")
     
-    # Check if we are being called as a command wrapper (e.g. `shell_guard -c "rm -rf /"`)
-    # Or just passthrough all args to the real shell
     args = sys.argv[1:]
     
     session_id = os.environ.get("GUARD_SESSION_ID", str(uuid.uuid4()))
     cfg = Config()
-    audit_path = (Path.cwd() / cfg.audit_path).resolve()
+    engine = GuardEngine(cfg)
 
-    def log_command(cmd_list: list[str]):
-        record = {
-            "schema_version": "v1",
-            "event_type": "SHELL_COMMAND",
-            "timestamp": utcnow(),
-            "session_id": session_id,
-            "agent": "Shell-Guard",
-            "data": {
-                "command": " ".join(cmd_list),
-                "cwd": os.getcwd()
-            }
-        }
-        write_audit(
-            audit_path=audit_path,
+    def check_and_run(cmd_list: list[str]):
+        # 1. Run through GuardEngine
+        tool_input = {"command": " ".join(cmd_list)}
+        verdict, block_reason = engine.check_tool(
+            tool_name="bash",
+            tool_input=tool_input,
+            agent_name="Antigravity",
             session_id=session_id,
-            record=record,
-            is_new_session=False,
-            hook_model=cfg.guard_model,
-            timeout_ms=cfg.timeout_ms,
-            agent_name="Shell-Guard"
+            cwd=os.getcwd()
         )
 
-    if args:
-        log_command(args)
-        # Execute the command
-        res = subprocess.run(args, shell=True)
+        if verdict == "BLOCK":
+            if cfg.audit_only:
+                sys.stderr.write(f"[coding-agent-guard] AUDIT: would have blocked shell command: {block_reason}\n")
+            else:
+                sys.stderr.write(f"[coding-agent-guard] BLOCK: shell command blocked: {block_reason}\n")
+                sys.exit(1)
+
+        # 2. Execute the command
+        res = subprocess.run(cmd_list, shell=True)
         sys.exit(res.returncode)
+
+    if args:
+        check_and_run(args)
     else:
         # Interactive mode or no-args call
-        # In a real implementation, we might want to wrap the interactive session,
-        # but for an audit shim, capturing the `-c` calls from agents is the priority.
         subprocess.run([shell_to_run])
 
 if __name__ == "__main__":

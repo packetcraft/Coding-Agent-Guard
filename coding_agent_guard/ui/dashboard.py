@@ -134,9 +134,10 @@ def _render_live_feed(audit_path: str) -> None:
 
         recent = df.tail(50).iloc[::-1].reset_index(drop=True)
 
-        col_ts, col_agent, col_sess, col_tool, col_verdict, col_method, col_preview = st.columns([2, 1, 1, 1, 1, 1, 4])
+        col_ts, col_agent, col_skill, col_sess, col_tool, col_verdict, col_method, col_preview = st.columns([2, 1, 1, 1, 1, 1, 1, 4])
         col_ts.markdown("**Timestamp**")
         col_agent.markdown("**Agent**")
+        col_skill.markdown("**Skill**")
         col_sess.markdown("**Session**")
         col_tool.markdown("**Tool**")
         col_verdict.markdown("**Verdict**")
@@ -147,20 +148,22 @@ def _render_live_feed(audit_path: str) -> None:
         for _, row in recent.iterrows():
             ts      = row["timestamp"].strftime("%H:%M:%S") if pd.notnull(row["timestamp"]) else "—"
             agent   = str(row.get("agent", "Claude"))
+            skill   = str(row.get("skill_id", "core"))
             sess    = _short_session(str(row.get("session_id", "")))
             tool    = str(row.get("tool_name", ""))
             verdict = str(row.get("verdict", ""))
             method  = str(row.get("inspection_method", "—")) if row.get("inspection_method") else "—"
             preview = _tool_input_preview(row)
 
-            c1, c2, c3, c4, c5, c6, c7 = st.columns([2, 1, 1, 1, 1, 1, 4])
+            c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 1, 1, 1, 1, 1, 1, 4])
             c1.text(ts)
             c2.text(agent)
-            c3.text(sess)
-            c4.text(tool)
-            c5.markdown(_badge(verdict), unsafe_allow_html=True)
-            c6.markdown(_method_badge(method) if method != "—" else "—", unsafe_allow_html=True)
-            c7.text(preview)
+            c3.text(skill)
+            c4.text(sess)
+            c5.text(tool)
+            c6.markdown(_badge(verdict), unsafe_allow_html=True)
+            c7.markdown(_method_badge(method) if method != "—" else "—", unsafe_allow_html=True)
+            c8.text(preview)
 
     _feed()
 
@@ -225,14 +228,15 @@ def _render_audit_explorer(audit_path: str) -> None:
     page_df = filtered_desc.iloc[(page - 1) * PAGE_SIZE : page * PAGE_SIZE].reset_index(drop=True)
 
     # Header row
-    h1, h2, h3, h4, h5, h6, h7, h8 = st.columns([2, 1, 1, 1, 1, 1, 1, 3])
-    for col, label in zip([h1, h2, h3, h4, h5, h6, h7, h8], ["Timestamp", "Agent", "Session", "Hook", "Tool", "Verdict", "Method", "Input preview"]):
+    h1, h2, h3, h4, h5, h6, h7, h8, h9 = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 3])
+    for col, label in zip([h1, h2, h3, h4, h5, h6, h7, h8, h9], ["Timestamp", "Agent", "Skill", "Session", "Hook", "Tool", "Verdict", "Method", "Input preview"]):
         col.markdown(f"**{label}**")
     st.divider()
 
     for i, (_, row) in enumerate(page_df.iterrows()):
         ts      = row["timestamp"].strftime("%Y-%m-%d %H:%M:%S") if pd.notnull(row["timestamp"]) else "—"
         agent   = str(row.get("agent", "Claude"))
+        skill   = str(row.get("skill_id", "core"))
         sess    = _short_session(str(row.get("session_id", "")))
         hook_ev = str(row.get("hook_event", "Pre"))[:3]
         tool    = str(row.get("tool_name", ""))
@@ -240,15 +244,16 @@ def _render_audit_explorer(audit_path: str) -> None:
         method  = str(row.get("inspection_method", "")) if row.get("inspection_method") else "—"
         preview = _tool_input_preview(row)
 
-        c1, c2, c3, c4, c5, c6, c7, c8 = st.columns([2, 1, 1, 1, 1, 1, 1, 3])
+        c1, c2, c3, c4, c5, c6, c7, c8, c9 = st.columns([2, 1, 1, 1, 1, 1, 1, 1, 3])
         c1.text(ts)
         c2.text(agent)
-        c3.text(sess)
-        c4.text(hook_ev)
-        c5.text(tool)
-        c6.markdown(_badge(verdict), unsafe_allow_html=True)
-        c7.markdown(_method_badge(method) if method != "—" else "—", unsafe_allow_html=True)
-        c8.text(preview)
+        c3.text(skill)
+        c4.text(sess)
+        c5.text(hook_ev)
+        c6.text(tool)
+        c7.markdown(_badge(verdict), unsafe_allow_html=True)
+        c8.markdown(_method_badge(method) if method != "—" else "—", unsafe_allow_html=True)
+        c9.text(preview)
 
         with st.expander(f"Details — row {(page - 1) * PAGE_SIZE + i + 1}"):
             d1, d2 = st.columns(2)
@@ -408,7 +413,7 @@ def _render_dashboard(audit_path: str) -> None:
         fig = px.pie(verdict_counts, values="Count", names="Verdict", 
                      color="Verdict", color_discrete_map=_VERDICT_COLOUR)
         fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=220)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
     col_left2, col_mid2, col_right2 = st.columns(3)
 
@@ -562,6 +567,25 @@ def _load_latest_shadow_scan(audit_path: str) -> Optional[dict]:
     return last
 
 
+def _load_latest_patrol(audit_path: str) -> Optional[dict]:
+    patrol_file = Path(audit_path) / "patrol_history.jsonl"
+    if not patrol_file.exists():
+        return None
+    last: Optional[dict] = None
+    try:
+        with open(patrol_file, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    try:
+                        last = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+    except OSError:
+        return None
+    return last
+
+
 def _run_shadow_scan_now(audit_path: str, scan_root: Optional[str]) -> dict:
     from coding_agent_guard.discovery.scanner import run_scan, emit_audit
     from coding_agent_guard.discovery.report import as_json
@@ -637,11 +661,91 @@ def _render_shadow_ai(audit_path: str) -> None:
     # just create a simple helper in dashboard.py if needed.
     # Let's see if I can re-run scan root if needed or just use a dict-based generator.
     
+    
     summary = scan.get("summary", {})
+    score = summary.get("posture_maturity_score", 0)
+
+    # ── Guardy Mascot & Gauge ────────────────────────────────────────────────
+    m1, m2 = st.columns([1, 3])
+    with m1:
+        # Mascot logic
+        if score < 40:
+            mascot = "🚨"
+            status_text = "CRITICAL"
+            mascot_color = "#F7768E"
+        elif score < 75:
+            mascot = "⚠️"
+            status_text = "WARNING"
+            mascot_color = "#E0AF68"
+        else:
+            mascot = "✅"
+            status_text = "HEALTHY"
+            mascot_color = "#9ECE6A"
+        
+        st.markdown(
+            f"""
+            <div style="background:#1a1b26; border: 2px solid {mascot_color}; border-radius: 15px; padding: 20px; text-align: center;">
+                <div style="font-size: 60px;">{mascot}</div>
+                <div style="color:{mascot_color}; font-weight: bold; font-size: 1.2rem; margin-top: 10px;">{status_text}</div>
+                <div style="color:#787c99; font-size: 0.8rem;">Posture Maturity</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with m2:
+        # Plotly Gauge
+        import plotly.graph_objects as go
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = score,
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            title = {'text': "Maturity Score (%)", 'font': {'size': 20, 'color': "#c0caf5"}},
+            gauge = {
+                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#787c99"},
+                'bar': {'color': mascot_color},
+                'bgcolor': "#1a1b26",
+                'borderwidth': 2,
+                'bordercolor': "#414868",
+                'steps': [
+                    {'range': [0, 40], 'color': 'rgba(247, 118, 142, 0.1)'},
+                    {'range': [40, 75], 'color': 'rgba(224, 175, 104, 0.1)'},
+                    {'range': [75, 100], 'color': 'rgba(158, 206, 106, 0.1)'}
+                ],
+                'threshold': {
+                    'line': {'color': "white", 'width': 4},
+                    'thickness': 0.75,
+                    'value': score
+                }
+            }
+        ))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font={'color': "#c0caf5"},
+            margin=dict(l=20, r=20, t=40, b=20),
+            height=250
+        )
+        st.plotly_chart(fig, width="stretch")
+
+    st.divider()
     ts = _fmt_timestamp(scan.get("timestamp", "—"))
 
     # ── Export ────────────────────────────────────────────────────────────────
     col_t1, col_t2 = st.columns([10, 2])
+    
+    # Patrol Status
+    patrol = _load_latest_patrol(audit_path)
+    if patrol:
+        p_ts = _fmt_timestamp(patrol.get("timestamp", "—"))
+        drift = patrol.get("drift", {})
+        delta = drift.get("posture_score_delta", 0)
+        sign = "+" if delta >= 0 else ""
+        delta_str = f" ({sign}{delta}%)" if delta != 0 else ""
+        col_t1.success(f"🛡️ **Active Patrol**: Last checked **{p_ts}**. Drift: **{sign}{delta}%**")
+    else:
+        col_t1.warning("⚠️ **No Patrol History**: Automated security patrols have not been run yet.")
+
     col_t1.caption(
         f"Last scan: **{ts}** \u2022 Root: `{scan.get('scan_root', '—')}` \u2022 "
         f"Scan ID: `{scan.get('scan_id', '—')}`"
@@ -856,7 +960,7 @@ def _render_shadow_ai(audit_path: str) -> None:
                     height=220,
                     yaxis=dict(range=[0, 105]),
                 )
-                st.plotly_chart(fig_trend, use_container_width=True)
+                st.plotly_chart(fig_trend, width="stretch")
 
             # ── Scan Diff ─────────────────────────────────────────────────────
             with col_diff:

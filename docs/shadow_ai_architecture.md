@@ -41,14 +41,16 @@ coding-agent-guard shadow-ai [--root PATH] [--diff] [--fix]
     │       └─ _check_cicd_agents()               │  Unguarded pipeline agents?
     └─────────────────────────────────────────────┘
          │
-    ScanResult (dataclass)
-         │
-    ┌────┴──────────────────────┐
-    │  report.as_text()          │  Human-readable CLI output
-    │  report.as_json()          │  Structured JSON for SIEM / audit log
-    │  scanner.diff_scans()      │  Posture drift between two scans
-    │  scanner._apply_fix()      │  Interactive hook remediation
-    └────────────────────────────┘
+     ScanResult (dataclass)
+          │
+     ┌────┴────────────────────────┐
+     │  report.as_text()           │  Human-readable CLI output
+     │  report.as_json()           │  Structured JSON for SIEM / audit log
+     │  scanner.diff_scans()       │  Posture drift between two scans
+     │  scanner._apply_fix()       │  Interactive hook remediation
+     │  patrol.PatrolEngine()      │  Scheduled posture audits [NEW]
+     │  static_scanner.Scanner()   │  24-rule Deep Security Scan [NEW]
+     └─────────────────────────────┘
 ```
 
 ---
@@ -209,6 +211,26 @@ Using patterns: `sk-[A-Za-z0-9]{20,}`, `AIza[A-Za-z0-9]{35}`, `ghp_/gho_` GitHub
 Accessible via `--diff` CLI flag or the drift panel in the **AI Posture & Discovery** dashboard tab.
 
 ---
+
+## Posture Patrol (`core/patrol.py`)
+
+The `PatrolEngine` automates security checks to ensure posture doesn't degrade over time.
+
+- **Baseline Comparison**: Automatically compares new scans against the last known good state.
+- **Background Service**: `coding-agent-guard patrol serve` runs a persistent loop.
+- **Alerting**: Logs `PATROL_RUN` events to `audit/patrol_history.jsonl`.
+- **Drift Logic**: Surfaces "Newly Unprotected" repositories (those that lost a hook or whose binary went missing).
+
+---
+
+## Static Security Scan (`core/static_scanner.py`)
+
+A high-performance pattern-matching engine that provides a fast-path for malicious payload detection.
+
+- **24 Specialized Rules**: Covers Trojans, Obfuscation, Secret Leakage, and Destructive Commands.
+- **Real-time Blocking**: Integrated into `core/guard.py` to intercept file writes and bash commands.
+- **0ms Latency**: Regex-based detection avoids LLM overhead for known-bad signatures.
+- **CLI**: `coding-agent-guard scan <path>` for on-demand codebase audits.
 
 ## Remediation Auto-fix (`scanner._apply_fix`)
 

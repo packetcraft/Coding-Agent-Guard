@@ -1,6 +1,6 @@
 # Shadow AI — Discovery Feature Plan
 
-**Status:** Phases 1 & 2 Verified Complete (2026-04-18) — Phase 3 In Progress — Phase 4 Planned  
+**Status:** Phases 1, 2 & 3 Verified Complete (2026-04-23) — Phase 4 Planned  
 **Priority:** Active development  
 **Audience:** IT / CISO teams — solving the "Shadow AI" problem on developer laptops
 
@@ -353,7 +353,7 @@ Phase 4 (live MCP enumeration) is the highest-risk work and is cleanly separable
 |---|---|---|---|---|
 | 1 — Core Discovery | Agent detect, config crawl, gap analysis, CLI | ✅ Done (2026-04-16) | ~3 days | None |
 | 2 — Trust & MCP Config | Trust analyzer, MCP config inventory, dashboard tab | ✅ Done (2026-04-16) | ~2 days | Phase 1 |
-| 3 — UI Controls | Daily auto-scan, delta view, suppression UI, `--diff` CLI | Planned | ~1.5 days | Phase 2 |
+| 3 — Active Defense | Patrol, static scanner, drift, guard | ✅ Done (2026-04-23) | ~1.5 days | Phase 2 |
 | 4 — MCP Enumeration | Live tools/list calls, Enumerate button | Planned | ~3 days | Phase 2 |
 | **Total** | | | **~10 days** | |
 

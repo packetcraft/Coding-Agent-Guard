@@ -1,0 +1,87 @@
+# Static Analysis Rules for Coding Agent Guard
+# Inspired by GoPlus AgentGuard (24 rules total)
+
+rules:
+  # ── TROJAN & BACKDOOR ──────────────────────────────────────────────────────
+  - id: TROJAN_PAYLOAD_GENERIC
+    category: TROJAN
+    severity: HIGH
+    pattern: "(?i)(reverse_shell|bind_shell|nc -e /bin/sh|bash -i >& /dev/tcp/)"
+    description: "Generic reverse shell or bind shell payload detected."
+
+  - id: MALICIOUS_SUDO_MOD
+    category: TROJAN
+    severity: HIGH
+    pattern: "echo .* >> /etc/sudoers"
+    description: "Attempt to modify sudoers file detected."
+
+  - id: CRON_PERSISTENCE
+    category: TROJAN
+    severity: MEDIUM
+    pattern: "echo .* >> /etc/crontab"
+    description: "Attempt to add persistence via crontab."
+
+  # ── OBFUSCATION ────────────────────────────────────────────────────────────
+  - id: SUSPICIOUS_BASE64_EXEC
+    category: OBFUSCATION
+    severity: HIGH
+    pattern: "(base64 -d |atob\\(|btoa\\().* (sh|bash|python|eval)"
+    description: "Base64 decoding followed by immediate execution."
+
+  - id: HEX_ENCODED_SHELL
+    category: OBFUSCATION
+    severity: HIGH
+    pattern: "\\\\x[0-9a-fA-F]{2}\\\\x[0-9a-fA-F]{2}"
+    description: "Suspicious hex-encoded byte sequence found (common in shellcode)."
+
+  # ── EXFILTRATION ───────────────────────────────────────────────────────────
+  - id: SENSITIVE_DATA_EXFIL
+    category: EXFILTRATION
+    severity: HIGH
+    pattern: "(curl|wget|http).*(\\.env|\\.ssh|\\.aws|\\.git/config)"
+    description: "Attempt to exfiltrate sensitive configuration files."
+
+  - id: DNS_EXFILTRATION
+    category: EXFILTRATION
+    severity: MEDIUM
+    pattern: "nslookup .* \\.(com|org|net|io|me)"
+    description: "Possible DNS tunneling/exfiltration pattern."
+
+  # ── SECRETS & KEYS ─────────────────────────────────────────────────────────
+  - id: AWS_SECRET_KEY
+    category: SECRETS
+    severity: HIGH
+    pattern: "(?i)aws_secret_access_key\\s*[:=]\\s*['\"][A-Za-z0-9/+=]{40}['\"]"
+    description: "Hardcoded AWS Secret Access Key detected."
+
+  - id: PRIVATE_KEY_EXPOSURE
+    category: SECRETS
+    severity: HIGH
+    pattern: "-----BEGIN (RSA|OPENSSH|EC|PGP) PRIVATE KEY-----"
+    description: "Unencrypted private key found in code/files."
+
+  - id: ETH_PRIVATE_KEY
+    category: SECRETS
+    severity: HIGH
+    pattern: "0x[a-fA-F0-9]{64}"
+    description: "Possible Ethereum/Web3 private key detected."
+
+  # ── SHELL EXECUTION ────────────────────────────────────────────────────────
+  - id: DESTRUCTIVE_RM
+    category: SHELL_EXEC
+    severity: HIGH
+    pattern: "rm -rf (\\$HOME|/|/home|/var|/etc)"
+    description: "Highly destructive recursive delete command detected."
+
+  - id: DEV_NULL_EXEC
+    category: SHELL_EXEC
+    severity: MEDIUM
+    pattern: "curl .* | bash"
+    description: "Suspicious pipe-to-bash from remote URL."
+
+  # ── REMOTE LOADER ──────────────────────────────────────────────────────────
+  - id: DYNAMIC_REMOTE_LOADER
+    category: REMOTE_LOADER
+    severity: HIGH
+    pattern: "(importlib\\.import_module|__import__|eval\\(requests\\.get)"
+    description: "Dynamic loading of remote code detected."

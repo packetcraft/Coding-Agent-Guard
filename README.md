@@ -15,10 +15,10 @@
 - **Hook Liveness Validation**: Detects `BROKEN_HOOK` status — repos that appear covered but whose guard binary is missing, leaving tool calls uninspected.
 - **MCP Capability Risk Scoring**: Classifies every MCP server into an exec / network / write-local / read-only risk tier and flags dangerous servers as findings.
 - **Memory File Secrets Scan**: Detects credential patterns in agent memory files (`~/.claude/`, `~/.gemini/`) that could be exfiltrated via prompt injection.
-- **Posture Drift**: `--diff` flag compares scans over time to surface new agents, lost protections, and new MCP servers.
-- **Remediation Auto-fix**: `--fix` flag interactively writes guard hooks into unguarded repos.
-- **External Brain Discovery**: Identifies active agents via "Digital Exhaust" in home directories, even if project artifacts are removed.
-- **Security Dashboard**: Premium Streamlit UI with dedicated tabs for **Live Feed**, **Audit Explorer**, **Analytics**, and **AI Posture & Discovery**. Includes posture score trend chart and full-page Markdown export.
+- **Security Dashboard**: Premium Streamlit UI with dedicated tabs for **Live Feed**, **Audit Explorer**, **Analytics**, and **AI Posture & Discovery**. Includes posture score trend chart, visual **Maturity Gauge**, **Guardy Mascot**, and full-page Markdown export.
+- **Daily Patrol**: Automated background service that runs security scans on a schedule to detect posture drift and newly unprotected repositories.
+- **Static Analysis Guard (Deep Scan)**: Integrated fast-path scanner with 24 rules for detecting Trojans, obfuscated code, and destructive shell commands in real-time.
+- **Agent & Skill Attribution**: Tracks which specific agent and sub-skill (e.g., an MCP server) initiated a tool call for granular forensics.
 
 ## ⚠️ Audit-Only Mode (Default)
 
@@ -100,7 +100,7 @@ Opens the Streamlit dashboard at **http://localhost:8501** with five tabs:
 - **📡 Live Feed** — auto-refreshing view of current tool calls and verdicts
 - **🔍 Forensics & Logs** — filterable history of all security events with keyword search
 - **📊 Dashboard** — analytics: block rate over time, verdict distribution, latency P50/P95/P99
-- **🛡️ AI Posture & Discovery** — posture scan: agent inventory, hook coverage map (with `BROKEN_HOOK` detection), MCP surface with capability risk tiers, security findings, posture score trend chart, and scan drift panel. Exportable as a full-page Markdown report.
+- **🛡️ AI Posture & Discovery** — posture scan: agent inventory, hook coverage map (with `BROKEN_HOOK` detection), MCP surface with capability risk tiers, security findings, posture score trend chart, visual **Maturity Gauge**, and scan drift panel. Exportable as a full-page Markdown report.
 
 The UI features a premium **Tokyo Night-inspired dark theme** ported from the LLM Security Workbench for a unified professional experience.
 
@@ -186,17 +186,50 @@ Copy-Item C:\path\to\Coding-Agent-Guard\agent_configs\gemini_settings.template.j
 > The templates use `"command": "coding-agent-guard"` which requires the venv to be active. If the venv may not always be active, use the automated installer — it writes the absolute path to the venv executable.
 
 ### 🐧 Universal Shell Guard & Antigravity
-For IDE-based agents (like Antigravity) that don't support native hooks, or to passively audit any shell-based agent, use the `shell_guard` adapter:
+For IDE-based agents (like Antigravity) that don't support native hooks, use the universal adapters. These adapters respect the global `audit_only` setting in `coding_agent_guard/rules/config.yaml`.
+
+#### 1. Guarding the Shell
+Wrap the agent process or any shell command with the `shell_guard` adapter:
 
 ```bash
 python -m coding_agent_guard.adapters.shell_guard <command>
 ```
 
-**Example: Guarding Antigravity**
+**Example: Guarding Antigravity Shell**
 ```bash
 python -m coding_agent_guard.adapters.shell_guard antigravity
 ```
-This wraps the agent process, logging every shell command it executes to the audit trail while allowing them to run in AUDIT mode.
+
+- **If `audit_only: true`**: Commands are logged and classified. If dangerous, a warning is printed to stderr, but the command runs.
+- **If `audit_only: false`**: Dangerous commands are blocked (exit code 1), preventing execution.
+
+#### 2. Guarding MCP Tools (IDE Extensions)
+If your agent uses MCP servers (like in Cursor, VS Code, or Antigravity), you can wrap the MCP server command in your IDE settings:
+
+**Original IDE Setting:**
+```json
+"mcpServers": {
+  "everything": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-everything"]
+  }
+}
+```
+
+**Guarded IDE Setting:**
+```json
+"mcpServers": {
+  "everything": {
+    "command": "python",
+    "args": [
+      "-m", "coding_agent_guard.adapters.mcp_shim",
+      "npx", "-y", "@modelcontextprotocol/server-everything"
+    ]
+  }
+}
+```
+
+- **Enforcement**: If `audit_only: false`, the shim intercepts `tools/call` requests. If the Guard engine returns `BLOCK`, the shim returns a JSON-RPC error to the IDE, and the tool never reaches the real server.
 
 ### 📡 Shadow AI Posture Scan
 
@@ -211,8 +244,28 @@ Options:
 coding-agent-guard shadow-ai --root /path/to/projects   # scan a specific directory
 coding-agent-guard shadow-ai --output json               # JSON output for SIEM/export
 coding-agent-guard shadow-ai --no-audit                  # skip writing to audit log
-coding-agent-guard shadow-ai --diff                      # compare against previous scan (posture drift)
+coding_agent_guard shadow-ai --diff                      # compare against previous scan (posture drift)
 coding-agent-guard shadow-ai --fix                       # interactively write guard hooks for unguarded repos
+```
+
+### 📡 Security Patrol (Automation)
+
+Schedule automated daily checks for your machine's security posture:
+
+```bash
+coding-agent-guard patrol run                            # run a patrol check now
+coding-agent-guard patrol status                         # show last patrol results and drift
+coding-agent-guard patrol serve --interval 86400         # start background service (24h loop)
+```
+
+### 🔍 Static Security Scan (Deep Scan)
+
+Perform on-demand static analysis of repositories or payloads using 24 specialized detection rules:
+
+```bash
+coding-agent-guard scan .                                # scan current directory
+coding-agent-guard scan /path/to/repo --recursive        # recursive scan
+coding-agent-guard scan --format json                    # output results as JSON
 ```
 
 Results are written to `audit/shadow_ai_scans.jsonl` and rendered in the **AI Posture & Discovery** dashboard tab.
@@ -295,7 +348,7 @@ Edit `coding_agent_guard/rules/patterns.yaml` to customize:
 
 ## 🗺️ Roadmap (V2)
 
-- [ ] **Static Analysis Guard**: Integrated `bandit` and `eslint` scanning for proposed code changes.
+- [x] **Static Analysis Guard**: Integrated fast-path scanning for proposed code changes.
 - [ ] **Runtime Sandbox**: Automatic containerization of bash commands.
 - [ ] **Supply Chain Guard**: Typosquatting and malicious package detection for `pip`/`npm`.
 - [ ] **Human-in-the-Loop (HITL)**: Interactive approval UI for high-risk actions.

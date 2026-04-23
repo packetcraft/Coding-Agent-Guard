@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from coding_agent_guard.core.config import Config
-from coding_agent_guard.core.telemetry import utcnow, write_audit
+from coding_agent_guard.core.guard import GuardEngine
 
 def main():
     if len(sys.argv) < 2:
@@ -20,76 +20,68 @@ def main():
 
     real_command = sys.argv[1:]
     
-    # Session ID is often not provided by the IDE, so we generate or use a persistent one
     session_id = os.environ.get("GUARD_SESSION_ID", str(uuid.uuid4()))
-    
     cfg = Config()
-    audit_path = (Path.cwd() / cfg.audit_path).resolve()
+    engine = GuardEngine(cfg)
     
-    # We'll use a subprocess to run the real server and pipe stdin/stdout
     import subprocess
-    
+    import threading
+
     proc = subprocess.Popen(
         real_command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=sys.stderr, # pass through error stream
+        stderr=sys.stderr,
         bufsize=0,
         text=True
     )
     
-    def log_event(event_type: str, data: dict):
-        record = {
-            "schema_version": "v1",
-            "event_type": event_type,
-            "timestamp": utcnow(),
-            "session_id": session_id,
-            "agent": "MCP-Shim",
-            "data": data
-        }
-        write_audit(
-            audit_path=audit_path,
-            session_id=session_id,
-            record=record,
-            is_new_session=False, # We'll let the first write handle session start if needed
-            hook_model=cfg.guard_model,
-            timeout_ms=cfg.timeout_ms,
-            agent_name="MCP-Shim"
-        )
-
-    # Simple loop to proxy stdin -> proc.stdin and proc.stdout -> stdout
-    # Both directions are JSON-RPC messages separated by newlines or Content-Length
-    # For simplicity, we assume one JSON-RPC message per line or valid block
-    
-    import threading
-
     def proxy_in():
         for line in sys.stdin:
             try:
                 msg = json.loads(line)
                 if msg.get("method") == "tools/call":
-                    log_event("MCP_TOOL_CALL", {
-                        "method": msg.get("method"),
-                        "params": msg.get("params"),
-                        "id": msg.get("id")
-                    })
-            except Exception:
-                pass
+                    params = msg.get("params") or {}
+                    tool_name = params.get("name", "unknown")
+                    tool_input = params.get("arguments", {})
+                    
+                    # ── Call Guard Engine ──────────────────────────────────
+                    verdict, block_reason = engine.check_tool(
+                        tool_name=f"mcp__{tool_name}", # Prefix for attribution
+                        tool_input=tool_input,
+                        agent_name="Antigravity",
+                        session_id=session_id,
+                        cwd=os.getcwd()
+                    )
+                    
+                    if verdict == "BLOCK":
+                        if cfg.audit_only:
+                            sys.stderr.write(f"[coding-agent-guard] AUDIT: would have blocked MCP tool '{tool_name}': {block_reason}\n")
+                        else:
+                            sys.stderr.write(f"[coding-agent-guard] BLOCK: MCP tool '{tool_name}' blocked: {block_reason}\n")
+                            # Return JSON-RPC Error response
+                            err_resp = {
+                                "jsonrpc": "2.0",
+                                "id": msg.get("id"),
+                                "error": {
+                                    "code": -32000,
+                                    "message": f"Guard Block: {block_reason}"
+                                }
+                            }
+                            sys.stdout.write(json.dumps(err_resp) + "\n")
+                            sys.stdout.flush()
+                            continue # Don't forward to real server
+
+            except Exception as e:
+                sys.stderr.write(f"[coding-agent-guard] MCP Shim Error: {e}\n")
+            
             proc.stdin.write(line)
             proc.stdin.flush()
 
     def proxy_out():
         for line in proc.stdout:
-            try:
-                msg = json.loads(line)
-                # Check if it's a response to a tool call
-                if "result" in msg and "id" in msg:
-                    log_event("MCP_TOOL_RESPONSE", {
-                        "id": msg.get("id"),
-                        "result": msg.get("result")
-                    })
-            except Exception:
-                pass
+            # Audit responses if needed (PostToolUse)
+            # For now, we mainly focus on blocking the request (PreToolUse)
             sys.stdout.write(line)
             sys.stdout.flush()
 
